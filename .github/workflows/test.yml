@@ -1,0 +1,27 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Syntax
+        run: bash -n install.sh
+      - name: Help
+        run: bash install.sh --help
+      - name: Static checks
+        run: bash tests/test-script.sh
+
+  dry-run:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dry run
+        run: bash install.sh --dry-run --no-restart
