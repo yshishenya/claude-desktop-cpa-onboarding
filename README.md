@@ -113,9 +113,9 @@ Claude Sonnet 5.5, Opus 5.5 и Haiku 5.5.
 3. Проверяет ключ на сервере CPA.
 4. Сохраняет прежние настройки в резервную копию (последние пять).
 5. Записывает настройку подключения к CPA и запускает Claude.
-6. Добавляет рядом с Claude основные модели CPA (DeepSeek, GPT, Gemini), если
-   ваш ключ их открывает. Только Claude: `--claude-only` на Mac,
-   `-ClaudeOnly` на Windows.
+6. Добавляет рядом с Claude основные модели CPA (GPT 6.2 Astra, GPT 6.2 Sol,
+   GPT 6.1 Terra, GPT-6 Luna), если ваш ключ их открывает. Только Claude:
+   `--claude-only` на Mac, `-ClaudeOnly` на Windows.
 
 ## Если что-то пошло не так
 
@@ -224,21 +224,39 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 
 **Основные модели CPA.** Alias создаются один раз на сервере скриптом
 `scripts/sync-cpa-main-models.py` (нужен management key); пользователю он не
-нужен. Установщик добавляет только те alias, которые доступны ключу.
+нужен. Установщик добавляет только те alias, которые доступны ключу. Скрипт
+выдаёт ключу и три базовые модели Claude 5.5 (Opus, Sonnet, Haiku): их alias на
+сервере уже есть, новые не создаются.
+
+Имя alias говорит, на какую модель он указывает и для чего он: `семейство-модель-версия-claude-code`.
+Первое слово (`opus`, `sonnet`, `haiku`) нужно приложению, чтобы понять класс
+модели, а `claude-code` означает, что alias сделан для Claude Code. Слова `gpt`,
+`codex`, `deepseek`, `gemini` в имени нельзя: Claude Desktop такие имена
+отбрасывает.
+
+| Подпись в Claude | Alias | Модель в CPA |
+|---|---|---|
+| GPT 6.2 Astra | `opus-astra-6-2-claude-code` | `gpt-6.2-astra` |
+| GPT 6.2 Sol | `sonnet-sol-6-2-claude-code` | `gpt-6.2-sol` |
+| GPT 6.1 Terra | `sonnet-terra-6-1-claude-code` | `gpt-6.1-terra` |
+| GPT-6 Luna | `haiku-luna-6-claude-code` | `gpt-6-luna` |
+
+Когда в каталоге появится `gpt-6.2-terra`, достаточно сменить модель для Terra
+(поле `source` в скрипте и имя alias).
+
+Выдать доступ **одному ключу** (рекомендуется), сначала посмотрев план:
 
 ```bash
-python3 scripts/sync-cpa-main-models.py --all-keys           # показать план
-python3 scripts/sync-cpa-main-models.py --all-keys --apply   # применить
+export CPA_MANAGEMENT_KEY=...   # либо --management-key-file
+python3 scripts/sync-cpa-main-models.py --key-name 'ИМЯ_КЛЮЧА'           # показать план
+python3 scripts/sync-cpa-main-models.py --key-name 'ИМЯ_КЛЮЧА' --apply   # применить
 ```
 
-| Подпись в Claude | Alias |
-|---|---|
-| DeepSeek V4 Pro | `sonnet-4-5-cpa` |
-| DeepSeek V4.1 Flash | `haiku-4-5-cpa` |
-| GPT 6.2 Astra | `opus-6-2-astra-cpa` |
-| GPT 6.2 Sol | `sonnet-6-2-sol-cpa` |
-| GPT-6 Luna | `haiku-6-luna-cpa` |
-| Gemini 4 Argon | `sonnet-4-argon-cpa` |
+Для всех существующих ключей: `--all-keys` вместо `--key-name`. Перед
+изменением скрипт сохраняет снимок политики (права `600`), а после читает её
+заново и проверяет результат. Старые alias (`...-cpa`) на сервере не
+удаляются: у кого они уже записаны, продолжают работать. Чтобы убрать их с
+компьютера, используйте `--remove-model`.
 
 **Свои модели.** Claude Desktop отбрасывает имена с `deepseek`, `gpt`,
 `gemini` и другими чужими названиями, поэтому такую модель публикуют в CPA под

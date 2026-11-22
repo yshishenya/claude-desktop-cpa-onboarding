@@ -15,9 +15,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 KEY = "ci-test-key"
 CLAUDE = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]
-# Only these two main-model aliases are open to the key; the other four
+# Only these two main-model aliases are open to the key; the other two
 # answer 401, so the installer must skip them.
-ALIASES = {"sonnet-4-5-cpa", "haiku-4-5-cpa"}
+ALIASES = {"sonnet-sol-6-2-claude-code", "haiku-luna-6-claude-code"}
 
 
 class Handler(BaseHTTPRequestHandler):

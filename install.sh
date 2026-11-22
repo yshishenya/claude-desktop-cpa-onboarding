@@ -40,14 +40,15 @@ readonly MODEL_SONNET="claude-sonnet-5-5"
 readonly MODEL_OPUS="claude-opus-5-5"
 readonly MODEL_HAIKU="claude-haiku-5-5"
 
-# Main non-Claude models. Keep in sync with scripts/sync-cpa-main-models.py.
+# Main non-Claude models. Alias names say which model they point to (astra, sol,
+# terra, luna + version) and that they are for Claude Code; they cannot contain
+# gpt/codex/deepseek, because Claude Desktop drops such names. Keep in sync with
+# scripts/sync-cpa-main-models.py.
 MAIN_MODEL_SPECS=(
-  'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5'
-  'haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5'
-  'opus-6-2-astra-cpa=GPT 6.2 Astra=claude-opus-5-5'
-  'sonnet-6-2-sol-cpa=GPT 6.2 Sol=claude-sonnet-5'
-  'haiku-6-luna-cpa=GPT-6 Luna=claude-haiku-5-5'
-  'sonnet-4-argon-cpa=Gemini 4 Argon=claude-sonnet-5'
+  'opus-astra-6-2-claude-code=GPT 6.2 Astra=claude-opus-5-5'
+  'sonnet-sol-6-2-claude-code=GPT 6.2 Sol=claude-sonnet-5'
+  'sonnet-terra-6-1-claude-code=GPT 6.1 Terra=claude-sonnet-5'
+  'haiku-luna-6-claude-code=GPT-6 Luna=claude-haiku-5-5'
 )
 
 BASE_URL="${DEFAULT_BASE_URL}"
@@ -190,7 +191,7 @@ if mode == "add":
             raise SystemExit(
                 "Claude Desktop отбросит «%s»: в имени есть «%s». "
                 "Опубликуйте модель в CPA под alias с «claude-» или названием "
-                "семейства (sonnet, haiku) в имени, например sonnet-4-5-cpa, "
+                "семейства (sonnet, haiku) в имени, например sonnet-sol-6-2-claude-code, "
                 "и добавьте этот alias." % (name, bad.group(0))
             )
         entry = {
@@ -263,8 +264,7 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   --no-restart         Записать конфиг, но не запускать Claude.
   --with-chat          Показать вкладку Chat (ей нужен вход в claude.ai).
   --with-main-models   Добавить основные модели CPA (включено по умолчанию).
-  --claude-only        Только три базовые модели Claude, без DeepSeek,
-                       GPT и Gemini.
+  --claude-only        Только три базовые модели Claude, без GPT.
   --list-models        Показать модели Claude, доступные ключу CPA.
   --add-model SPEC     Добавить модель в список Claude. SPEC: ID,
                        ID=Подпись или ID=Подпись=Claude-модель.
@@ -316,8 +316,8 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   - после изменения списка Claude нужно перезапустить.
 
 Основные модели CPA:
-  - по умолчанию добавляются DeepSeek V4 Pro/Flash, GPT 6.2 Astra/Sol,
-    GPT-6 Luna и Gemini 4 Argon;
+  - по умолчанию добавляются GPT 6.2 Astra, GPT 6.2 Sol, GPT 6.1 Terra и
+    GPT-6 Luna (alias вида opus-astra-6-2-claude-code);
   - alias для них создаются один раз на сервере скриптом
     scripts/sync-cpa-main-models.py (нужен management key);
   - обычному пользователю management key не нужен: установщик только

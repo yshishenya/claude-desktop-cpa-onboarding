@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create Claude-friendly aliases for the main CPA models.
+"""Create Claude-friendly aliases for the main CPA models and grant them to keys.
 
 Claude Desktop only accepts model names that look like Anthropic models.  This
 script creates one alias per main model on the CPA policy plugin and grants
@@ -24,51 +24,55 @@ import urllib.request
 DEFAULT_URL = "https://cpa.2brain.pro"
 API_PREFIX = "/v0/management/plugins/cpa-key-policy"
 
-# Keep in sync with MAIN_MODEL_SPECS in install.sh.
+# The GPT aliases below are what Claude Desktop shows for the main CPA models.
+# Alias names say which model they point to (astra, sol, terra, luna + version)
+# and that they are for Claude Code; they cannot contain gpt/codex/deepseek,
+# because Claude Desktop drops such names. Keep in sync with MAIN_MODEL_SPECS in
+# install.sh and MainModels in install.ps1 (a test checks this).
 MAIN_MODELS = [
     {
-        "alias": "sonnet-4-5-cpa",
-        "source": "opencode-go/deepseek-v4-pro",
-        "label": "DeepSeek V4 Pro",
-        "tier": "sonnet",
-        "behaves_as": "claude-sonnet-5",
-    },
-    {
-        "alias": "haiku-4-5-cpa",
-        "source": "opencode-go/deepseek-v4.1-flash",
-        "label": "DeepSeek V4.1 Flash",
-        "tier": "haiku",
-        "behaves_as": "claude-haiku-5-5",
-    },
-    {
-        "alias": "opus-6-2-astra-cpa",
+        "alias": "opus-astra-6-2-claude-code",
         "source": "gpt-6.2-astra",
         "label": "GPT 6.2 Astra",
         "tier": "opus",
         "behaves_as": "claude-opus-5-5",
     },
     {
-        "alias": "sonnet-6-2-sol-cpa",
+        "alias": "sonnet-sol-6-2-claude-code",
         "source": "gpt-6.2-sol",
         "label": "GPT 6.2 Sol",
         "tier": "sonnet",
         "behaves_as": "claude-sonnet-5",
     },
     {
-        "alias": "haiku-6-luna-cpa",
+        "alias": "sonnet-terra-6-1-claude-code",
+        "source": "gpt-6.1-terra",
+        "label": "GPT 6.1 Terra",
+        "tier": "sonnet",
+        "behaves_as": "claude-sonnet-5",
+    },
+    {
+        "alias": "haiku-luna-6-claude-code",
         "source": "gpt-6-luna",
         "label": "GPT-6 Luna",
         "tier": "haiku",
         "behaves_as": "claude-haiku-5-5",
     },
-    {
-        "alias": "sonnet-4-argon-cpa",
-        "source": "opencode-go/gemini-4-argon",
-        "label": "Gemini 4 Argon",
-        "tier": "sonnet",
-        "behaves_as": "claude-sonnet-5",
-    },
 ]
+
+# The three base Claude 5.5 models. Their global aliases already exist (alias ==
+# source), so the script only grants them to keys: no new alias is created.
+CLAUDE_MODELS = [
+    {"alias": name, "source": name, "label": label, "tier": tier, "behaves_as": name}
+    for name, label, tier in (
+        ("claude-opus-5-5", "Claude Opus 5.5", "opus"),
+        ("claude-sonnet-5-5", "Claude Sonnet 5.5", "sonnet"),
+        ("claude-haiku-5-5", "Claude Haiku 5.5", "haiku"),
+    )
+]
+
+# What the script creates and grants.
+MODELS = MAIN_MODELS + CLAUDE_MODELS
 
 
 class ApiError(RuntimeError):
@@ -201,7 +205,7 @@ def main() -> int:
 
     print("== План ==")
     missing_routes = []
-    for model in MAIN_MODELS:
+    for model in MODELS:
         source = aliases_by_name.get(model["source"])
         if source is None:
             print(f"  ! {model['source']}: нет глобального alias, пропускаю")
@@ -226,7 +230,7 @@ def main() -> int:
     key_updates = []
     for key in targets:
         additions = []
-        for model in MAIN_MODELS:
+        for model in MODELS:
             alias = model["alias"]
             source = aliases_by_name.get(model["source"])
             if source is None:
@@ -246,7 +250,7 @@ def main() -> int:
         if additions:
             print(
                 "  + ключ %s: %d маршрут(ов) для %d моделей"
-                % (key.get("name") or key["id"], len(additions), len(MAIN_MODELS))
+                % (key.get("name") or key["id"], len(additions), len(MODELS))
             )
             key_updates.append((key, additions))
 
@@ -289,14 +293,14 @@ def main() -> int:
     aliases_after = {item["alias"] for item in alias_list(api("GET", api_base + "/aliases", token))}
     keys_after = {key["id"]: key for key in key_list(api("GET", api_base + "/keys", token))}
     problems = []
-    for model in MAIN_MODELS:
+    for model in MODELS:
         if model["source"] not in aliases_after:
             continue
         if model["alias"] not in aliases_after:
             problems.append(f"alias не создан: {model['alias']}")
     for key, _ in key_updates:
         after = keys_after.get(key["id"], {})
-        for model in MAIN_MODELS:
+        for model in MODELS:
             if model["source"] not in aliases_after:
                 continue
             if not key_model_entries(after, model["alias"]):

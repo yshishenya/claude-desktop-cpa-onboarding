@@ -295,12 +295,13 @@ ManifestType: installer
     }
     $script:CpaKey = 'new-key'
     Remove-Item -LiteralPath $modelFile -Force
-    $script:stubStatus = @{ 'sonnet-4-5-cpa' = 200; 'haiku-4-5-cpa' = 429; 'opus-6-2-astra-cpa' = 503; 'sonnet-6-2-sol-cpa' = 401 }
+    $script:stubStatus = @{ 'opus-astra-6-2-claude-code' = 200; 'sonnet-sol-6-2-claude-code' = 429; 'sonnet-terra-6-1-claude-code' = 503; 'haiku-luna-6-claude-code' = 401 }
     Add-CpaMainModel 6>$null
     $added = @(Read-CpaModelFile)
-    Assert-Equal 'only reachable main models are added (429 and 5xx count as reachable)' (($added | ForEach-Object { $_['name'] }) -join ',') 'sonnet-4-5-cpa,haiku-4-5-cpa,opus-6-2-astra-cpa'
-    Assert-Equal 'main model label' $added[0]['labelOverride'] 'DeepSeek V4 Pro'
-    Assert-Equal 'main model behavesAs' $added[0]['behavesAs'] 'claude-sonnet-5'
+    Assert-Equal 'only reachable main models are added (429 and 5xx count as reachable)' (($added | ForEach-Object { $_['name'] }) -join ',') 'opus-astra-6-2-claude-code,sonnet-sol-6-2-claude-code,sonnet-terra-6-1-claude-code'
+    Assert-Equal 'main model label' $added[0]['labelOverride'] 'GPT 6.2 Astra'
+    Assert-Equal 'main model behavesAs' $added[0]['behavesAs'] 'claude-opus-5-5'
+    Assert-Equal 'main model tier follows behavesAs' $added[0]['anthropicFamilyTier'] 'opus'
 
     Remove-Item -LiteralPath $modelFile -Force
     $script:stubStatus = @{}
