@@ -134,7 +134,7 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 | `--no-restart` | Записать настройку, но не запускать Claude |
 | `--with-chat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
 | `--list-models` | Показать модели Claude, доступные вашему ключу CPA |
-| `--add-model SPEC` | Добавить модель в список Claude: `ID` или `ID=Подпись` |
+| `--add-model SPEC` | Добавить модель в список Claude: `ID`, `ID=Подпись` или `ID=Подпись=Claude-модель` |
 | `--remove-model ID` | Убрать модель, добавленную через `--add-model` |
 | `--yes` | Не задавать вопросов, если ключ уже найден |
 | `--ask-key` | Не искать сохранённый ключ, а сразу спросить новый |
@@ -173,6 +173,29 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
   --configure-only
 ```
 
+Если модель не от Anthropic, под исходным именем её добавить нельзя: Claude
+Desktop принимает только ID, похожие на Anthropic, и отбрасывает `deepseek-*`,
+`gpt-*`, `gemini-*` и подобные. Администратор CPA публикует такую модель под
+alias с `claude-` в имени — например, `claude-sonnet-4-5-cpa`. После этого
+добавьте alias. Третий элемент задаёт `behavesAs` — лимиты и уровни effort:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
+  --add-model 'opencode-go/claude-sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' \
+  --configure-only
+```
+
+Пример настройки CPA (`plugins.configs.cpa-opencode-go.models`):
+
+```yaml
+models:
+  - name: deepseek-v4-pro
+    alias: claude-sonnet-4-5-cpa
+```
+
+Третий элемент попадает в поле `behavesAs`: приложение будет знать, что это
+за модель, какие у неё лимиты и какие уровни effort показывать.
+
 Убрать добавленную модель:
 
 ```bash
@@ -188,10 +211,12 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
   не удаляет.
 - После изменения списка Claude нужно перезапустить. Установщик делает это
   сам, если не указан `--no-restart`.
-- Модели не-Claude (`gpt-*`, `gemini-*` и другие) технически проходят через
-  CPA, но в Claude Desktop не тестировались: приложение отправляет запросы
-  в формате Anthropic и ожидает поведение Claude. Для повседневной работы
-  надёжнее модели Claude.
+- Модели не-Claude (`gpt-*`, `gemini-*`, `deepseek-*` и другие) добавляются
+  только через alias, опубликованный в CPA. Установщик откажется записывать
+  такой ID напрямую: Claude Desktop всё равно выбросит его из списка.
+- Даже с alias поведение не-Claude модели зависит от CPA и может отличаться
+  от Claude: приложение ожидает Claude-специфичные возможности. Для
+  повседневной работы надёжнее модели Claude.
 
 ## Как вернуть всё обратно
 
@@ -314,6 +339,12 @@ Claude Desktop умеет работать через сторонний шлю�
 `labelOverride`, `supports1m`, `prefer1m`, `anthropicFamilyTier`,
 `isFamilyDefault`, `behavesAs`, `maxEffort`. Первая модель списка — модель
 по умолчанию.
+
+Claude Desktop принимает в `inferenceModels` только ID, похожие на Anthropic,
+и отбрасывает имена с `deepseek`, `gpt`, `gemini` и другими чужими
+названиями. Поэтому не-Claude модель сначала публикуют в CPA под alias с
+`claude-` в имени, например `claude-sonnet-4-5-cpa`, а в профиль добавляют
+уже этот alias.
 
 После первого запуска приложение переносит ключ в связку ключей macOS
 (Keychain) и оставляет в профиле только ссылку на него. В этом случае

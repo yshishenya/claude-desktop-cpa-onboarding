@@ -126,7 +126,7 @@ update_models_file() {
   mkdir -p "$CONFIG_DIR" || die "Не удалось создать $CONFIG_DIR"
   chmod 700 "$CONFIG_DIR" 2>/dev/null || true
   python3 - "$MODELS_FILE" "$mode" "$@" <<'PY'
-import json, os, sys
+import json, os, re, sys
 
 path, mode, specs = sys.argv[1], sys.argv[2], sys.argv[3:]
 try:
@@ -142,6 +142,18 @@ ALLOWED = (
     "name", "labelOverride", "supports1m", "prefer1m",
     "anthropicFamilyTier", "isFamilyDefault", "behavesAs", "maxEffort",
 )
+# Claude Desktop drops inferenceModels entries whose names contain another
+# vendor's name, even when behavesAs is set. Keep the same rule here instead
+# of writing a model the app will silently ignore.
+NON_ANTHROPIC = re.compile(
+    r"ark-code|astron|command-r|deepseek|doubao|gemini|gemma|glm|gpt|grok|"
+    r"hermes|hy3|kimi|lfm|\bling\b|llama|longcat|mimo|minimax|mistral|"
+    r"mixtral|moonshot|nemotron|openai|phi-|qianfan|qwen|tc-code|\bunic\b|"
+    r"yi-|stepfun|step-3|seed-|bytedance|hunyuan|granite|amazon\.nova|nova-|"
+    r"devstral|ministral|ernie|codex|arcee|trinity|abab|phi\d|\bk2\.|\bm2\.|"
+    r"jamba|arctic|solar|mercury|zamba|kat-coder|\bds-|dpsk/",
+    re.I,
+)
 
 def tier_for(name):
     low = name.lower()
@@ -156,17 +168,30 @@ def clean(entry):
 if mode == "add":
     index = {x.get("name"): i for i, x in enumerate(data)}
     for spec in specs:
-        name, _, label = spec.partition("=")
-        name = name.strip()
-        label = label.strip()
+        parts = spec.split("=", 2)
+        name = parts[0].strip()
+        label = parts[1].strip() if len(parts) > 1 else ""
+        behaves = parts[2].strip() if len(parts) > 2 else ""
         if not name:
             raise SystemExit("пустой ID модели")
+        bad = NON_ANTHROPIC.search(name)
+        if bad:
+            raise SystemExit(
+                "Claude Desktop отбросит «%s»: в имени есть «%s». "
+                "Опубликуйте модель в CPA под alias с «claude-» в имени, "
+                "например claude-sonnet-4-5-cpa, и добавьте этот alias."
+                % (name, bad.group(0))
+            )
         entry = {
             "name": name,
             "supports1m": False,
             "labelOverride": label or name,
-            "anthropicFamilyTier": tier_for(name),
+            "anthropicFamilyTier": tier_for(behaves or name),
         }
+        if behaves:
+            # Lets Claude Desktop apply Claude's limits and effort levels to
+            # an alias it cannot identify, such as a DeepSeek gateway ID.
+            entry["behavesAs"] = behaves
         if name in index:
             data[index[name]] = entry
         else:
@@ -227,8 +252,9 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   --no-restart         Записать конфиг, но не запускать Claude.
   --with-chat          Показать вкладку Chat (ей нужен вход в claude.ai).
   --list-models        Показать модели Claude, доступные ключу CPA.
-  --add-model SPEC     Добавить модель в список Claude. SPEC: ID или
-                       ID=Подпись. Можно повторять. Пример:
+  --add-model SPEC     Добавить модель в список Claude. SPEC: ID,
+                       ID=Подпись или ID=Подпись=Claude-модель.
+                       Можно повторять. Пример:
                        --add-model 'claude-opus-4-8=Opus 4.8'
   --remove-model ID    Убрать модель, добавленную через --add-model.
   --key KEY            CPA API-ключ. Ключ, набранный в команде, остаётся
@@ -268,6 +294,9 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   - --add-model добавляет модель в inferenceModels и сохраняет выбор в
     ~/.config/claude-desktop-cpa/models.json, поэтому повторный запуск
     установщика его не потеряет;
+  - для моделей не от Anthropic нужен alias с «claude-» в имени,
+    опубликованный в CPA; третий элемент задает Claude-модель, чьи
+    лимиты и уровни effort использовать: ID=Подпись=claude-sonnet-5;
   - tier (sonnet/opus/haiku/fable/mythos) определяется по ID модели;
   - после изменения списка Claude нужно перезапустить.
 
