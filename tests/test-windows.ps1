@@ -250,10 +250,11 @@ ManifestType: installer
     Assert-True 'unknown keys are dropped' (-not $custom.PSObject.Properties['evil'])
     Assert-Equal 'an invalid tier is recomputed' $custom.anthropicFamilyTier 'haiku'
 
+    Remove-Item -LiteralPath $modelFile -Force
     Update-CpaModelFile -Mode add -Spec 'a-sonnet=A', 'b-opus=B' 6>$null
     Update-CpaModelFile -Mode remove -Spec 'a-sonnet' 6>$null
-    Assert-Equal 'remove keeps the other models' ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ',') 'claude-haiku-x,b-opus'
-    Update-CpaModelFile -Mode remove -Spec 'claude-haiku-x', 'b-opus' 6>$null
+    Assert-Equal 'remove keeps the other models' ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ',') 'b-opus'
+    Update-CpaModelFile -Mode remove -Spec 'b-opus' 6>$null
     Assert-Equal 'removing everything leaves an empty JSON array' ((Get-Content -Raw -LiteralPath $modelFile).Trim()) '[]'
 
     # Main models and -ListModels, with the HTTP layer stubbed.
@@ -291,7 +292,8 @@ ManifestType: installer
     $listing = (Show-CpaModelList 6>&1 | Out-String)
     $env:CPA_API_KEY = $null
     Assert-True '-ListModels shows Claude models' ($listing.Contains('claude-sonnet-5-5') -and $listing.Contains('Claude-Opus-4-8'))
-    Assert-True '-ListModels counts the other models' ($listing.Contains('Прочие модели: 1'))
+    # This file has no BOM, so it must stay ASCII (Windows PowerShell 5.1 reads it as ANSI).
+    Assert-True '-ListModels counts the other models' ($listing -match ': 1\. ')
 } finally {
     $env:USERPROFILE = $realProfile
     $env:LOCALAPPDATA = $realLocal
