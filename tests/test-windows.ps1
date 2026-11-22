@@ -314,6 +314,35 @@ ManifestType: installer
     Assert-True '-ListModels shows Claude models' ($listing.Contains('claude-sonnet-5-5') -and $listing.Contains('Claude-Opus-4-8'))
     # This file has no BOM, so it must stay ASCII (Windows PowerShell 5.1 reads it as ANSI).
     Assert-True '-ListModels counts the other models' ($listing -match ': 1\. ')
+
+    # --- README: the Windows key check command ----------------------------------------
+    # Run the command exactly as printed in README, with Read-Host and Invoke-WebRequest
+    # replaced by stand-ins. Defined last, so they cannot affect the tests above.
+    $readmeText = [System.IO.File]::ReadAllText((Join-Path $repo 'README.md'), [System.Text.Encoding]::UTF8)
+    $found = [regex]::Match($readmeText, '(?s)```powershell\r?\n(\$s = Read-Host.*?)\r?\n```')
+    Assert-True 'README has the Windows key check command' $found.Success
+    function Read-Host {
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'Stand-in so the README command can run without a person typing.')]
+        param($Prompt, [switch]$AsSecureString)
+        $null = $Prompt, $AsSecureString
+        $secure = New-Object System.Security.SecureString
+        foreach ($ch in 'abc-test-key'.ToCharArray()) { $secure.AppendChar($ch) }
+        return $secure
+    }
+    $script:sentKey = $null
+    function Invoke-WebRequest {
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'Stand-in so the README command never reaches the network.')]
+        param($Uri, $Headers, [switch]$UseBasicParsing)
+        $null = $Uri, $UseBasicParsing
+        $script:sentKey = $Headers['x-api-key']
+        return [pscustomobject]@{ StatusCode = 200 }
+    }
+    $checkOut = (Invoke-Expression $found.Groups[1].Value | Out-String)
+    Assert-True 'key check prints the number of characters' ($checkOut -match ': 12\s')
+    Assert-True 'key check prints the fingerprint' ($checkOut.Contains((Get-CpaFingerprint 'abc-test-key')))
+    Assert-True 'key check prints the server answer' ($checkOut -match 'HTTP 200')
+    Assert-True 'key check never prints the key' (-not $checkOut.Contains('abc-test-key'))
+    Assert-Equal 'key check sends the key in the x-api-key header' $script:sentKey 'abc-test-key'
 } finally {
     $env:USERPROFILE = $realProfile
     $env:LOCALAPPDATA = $realLocal

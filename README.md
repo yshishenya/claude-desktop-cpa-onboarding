@@ -134,6 +134,35 @@ Claude Sonnet 5.5, Opus 5.5 и Haiku 5.5.
 Не помогло? Запустите [проверку](#проверка-и-смена-ключа) и приложите её
 результат к [обращению](#помощь). Ключ в результате не показывается.
 
+### Проверить ключ отдельно от установщика
+
+Если ключ не принимается (`HTTP 401`), так можно увидеть, что именно вы
+вводите. Команда спросит ключ скрытым вводом, покажет число символов и
+отпечаток (сам ключ не выводится) и спросит у сервера, принимает ли он его.
+Сравните цифры с теми, что назвал администратор. Если они не совпадают, при
+копировании потерялся или заменился символ: скопируйте ключ ещё раз целиком.
+
+**macOS** (Терминал):
+
+```bash
+printf 'Вставьте ключ и нажмите Enter: '; read -rs K; echo; printf 'символов: %s\nотпечаток: %s\n' "$(printf %s "$K" | wc -c | tr -d ' ')" "$(printf %s "$K" | shasum -a 256 | cut -c1-8)"; printf 'x-api-key: %s\n' "$K" | curl -sS -o /dev/null -w 'ответ сервера: HTTP %{http_code}\n' -H @- https://cpa.2brain.pro/v1/models
+```
+
+**Windows** (PowerShell):
+
+```powershell
+$s = Read-Host 'Вставьте ключ и нажмите Enter' -AsSecureString
+$k = [Net.NetworkCredential]::new('', $s).Password
+$h = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($k))
+'символов: ' + [Text.Encoding]::UTF8.GetByteCount($k)
+'отпечаток: ' + (-join ($h[0..3] | ForEach-Object { $_.ToString('x2') }))
+try { $r = (Invoke-WebRequest https://cpa.2brain.pro/v1/models -Headers @{ 'x-api-key' = $k } -UseBasicParsing).StatusCode } catch { if ($_.Exception.Response) { $r = [int]$_.Exception.Response.StatusCode } else { $r = 'нет ответа' } }
+'ответ сервера: HTTP ' + $r
+```
+
+Нормальный результат: `HTTP 200`. Ответ `401` означает, что сервер не принял
+ключ, `нет ответа` — что нет связи с сервером.
+
 ## Проверка и смена ключа
 
 **Windows** (PowerShell):

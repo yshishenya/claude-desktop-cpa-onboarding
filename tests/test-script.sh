@@ -155,4 +155,38 @@ grep -q 'не из латиницы' <<<"$out" || fail "describe_key must flag l
 out="$(describe_key 'sk-clb abc' 2>&1)"
 grep -q 'пробел' <<<"$out" || fail "describe_key must flag a space inside the key"
 
+# --- README: the key check command works and keeps the key out of curl's arguments
+check_cmd="$(python3 - "$repo_dir/README.md" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r"```bash\n(printf 'Вставьте ключ.*?)\n```", text, re.S)
+print(m.group(1) if m else "")
+PY
+)"
+[[ -n "$check_cmd" ]] || fail "README must contain the key check command for macOS"
+shim="$(mktemp -d)"
+cat > "$shim/curl" <<'SH'
+#!/bin/bash
+# Stand-in for curl: the key must arrive on stdin (-H @-), never in the arguments.
+cat > "$SHIM_HEADER"
+case "$*" in *abc-test-key*) echo "key leaked into curl arguments" >&2; exit 9 ;; esac
+echo "ответ сервера: HTTP 200"
+SH
+chmod +x "$shim/curl"
+export SHIM_HEADER="$shim/header"
+want_fp="$(printf %s abc-test-key | shasum -a 256 | cut -c1-8)"
+# The command is pasted into the user's own shell: zsh is the default on current
+# Macs, older accounts still use bash 3.2. Run it in every shell that is installed.
+for sh_bin in /bin/bash bash zsh; do
+  command -v "$sh_bin" >/dev/null 2>&1 || continue
+  : > "$SHIM_HEADER"
+  out="$(printf 'abc-test-key\n' | PATH="$shim:$PATH" "$sh_bin" -c "$check_cmd" 2>&1)" || fail "the key check command failed in $sh_bin: $out"
+  grep -q "символов: 12" <<<"$out" || fail "key check must print the number of characters ($sh_bin)"
+  grep -q "отпечаток: $want_fp" <<<"$out" || fail "key check must print the fingerprint ($sh_bin)"
+  grep -q "ответ сервера: HTTP 200" <<<"$out" || fail "key check must print the server answer ($sh_bin)"
+  if grep -q 'abc-test-key' <<<"$out"; then fail "key check must never print the key ($sh_bin)"; fi
+  [[ "$(cat "$SHIM_HEADER")" == "x-api-key: abc-test-key" ]] || fail "key check must send the key as the x-api-key header on stdin ($sh_bin)"
+done
+rm -rf "$shim"
+
 echo "static checks OK"
