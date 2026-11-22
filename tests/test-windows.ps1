@@ -202,6 +202,7 @@ ManifestType: installer
     # This file is ASCII only: build the lookalike with a character code.
     $esc = [string][char]27
     Assert-Equal 'clean key strips paste markers, control characters and spaces' (ConvertTo-CpaCleanKey ($esc + '[200~  sk-abc-123 ' + [char]9 + $esc + '[201~' + [char]13)) 'sk-abc-123'
+    Assert-Equal 'clean key trims a leading blank line' (ConvertTo-CpaCleanKey ([string][char]10 + '  sk-abc-123' + [char]10)) 'sk-abc-123'
     Assert-Equal 'clean key keeps the inside of a key' (ConvertTo-CpaCleanKey 'sk-ab c') 'sk-ab c'
     Assert-Equal 'clean key of nothing is empty' (ConvertTo-CpaCleanKey $null) ''
 

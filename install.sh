@@ -805,10 +805,14 @@ key_fingerprint() {
 # Removes what a paste can add around a key: terminal escape sequences, other
 # control characters and surrounding whitespace. The inside of the key is kept.
 clean_key() {
-  printf '%s' "${1:-}" \
+  local v
+  v="$(printf '%s' "${1:-}" \
     | LC_ALL=C sed -e $'s/\033\\[[0-9;]*[A-Za-z~]//g' \
-    | LC_ALL=C tr -d '\000-\010\013-\037\177' \
-    | LC_ALL=C sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+    | LC_ALL=C tr -d '\000-\010\013-\037\177')"
+  # Trim the whole value, not line by line, so a leading blank line goes too.
+  v="${v#"${v%%[![:space:]]*}"}"
+  v="${v%"${v##*[![:space:]]}"}"
+  printf '%s' "$v"
 }
 
 # Says what was actually received, without showing the key. A typo, a lost

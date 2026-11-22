@@ -141,6 +141,9 @@ bash "$repo_dir/tests/test-models.sh"
 # --- key input: paste artifacts are cleaned, rejections are explained ---------
 [[ "$(clean_key $'\033[200~  sk-abc-123 \t\033[201~\r')" == "sk-abc-123" ]] \
   || fail "clean_key must strip paste markers, control characters and surrounding whitespace"
+[[ "$(clean_key $'\n  sk-abc-123\n')" == "sk-abc-123" ]] \
+  || fail "clean_key must trim a leading blank line, not only trailing whitespace"
+[[ "$(clean_key $'\n\t \n')" == "" ]] || fail "clean_key of only whitespace must be empty"
 [[ "$(clean_key 'sk-ab c')" == "sk-ab c" ]] || fail "clean_key must not touch the inside of a key"
 [[ -z "$(clean_key '')" ]] || fail "clean_key of an empty value must stay empty"
 
