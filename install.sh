@@ -34,9 +34,21 @@ readonly DEFAULT_BASE_URL="https://cpa.2brain.pro"
 readonly SUPPORT_DIR="${HOME}/Library/Application Support/Claude-3p"
 readonly LOG_DIR="${HOME}/Library/Logs/Claude-3p"
 readonly PROFILE_NAME="CPA"
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/claude-desktop-cpa"
+readonly MODELS_FILE="${CONFIG_DIR}/models.json"
 readonly MODEL_SONNET="claude-sonnet-5-5"
 readonly MODEL_OPUS="claude-opus-5-5"
 readonly MODEL_HAIKU="claude-haiku-5-5"
+
+# Main non-Claude models. Keep in sync with scripts/sync-cpa-main-models.py.
+MAIN_MODEL_SPECS=(
+  'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5'
+  'haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5'
+  'opus-6-2-astra-cpa=GPT 6.2 Astra=claude-opus-5-5'
+  'sonnet-6-2-sol-cpa=GPT 6.2 Sol=claude-sonnet-5'
+  'haiku-6-luna-cpa=GPT-6 Luna=claude-haiku-5-5'
+  'sonnet-4-argon-cpa=Gemini 4 Argon=claude-sonnet-5'
+)
 
 BASE_URL="${DEFAULT_BASE_URL}"
 KEY=""
@@ -46,11 +58,15 @@ DO_UPDATE=1
 DO_CONFIGURE=1
 DO_RESTART=1
 WITH_CHAT=0
+WITH_MAIN_MODELS=1
 FORCE=0
 ASSUME_YES=0
 ASK_KEY=0
 CHECK=0
 DRY_RUN=0
+LIST_MODELS=0
+ADD_MODELS=()
+REMOVE_MODELS=()
 
 TMP_DIR=""
 MOUNT_DIR=""
@@ -111,6 +127,118 @@ read_secret() {
   return 1
 }
 
+# Extra models are persisted outside the 3P profile, because the profile is
+# rewritten on every run. Only model IDs and labels are stored here; keys
+# never reach this file.
+update_models_file() {
+  local mode="$1"
+  shift
+  [[ $# -gt 0 ]] || return 0
+  mkdir -p "$CONFIG_DIR" || die "Не удалось создать $CONFIG_DIR"
+  chmod 700 "$CONFIG_DIR" 2>/dev/null || true
+  python3 - "$MODELS_FILE" "$mode" "$@" <<'PY'
+import json, os, re, sys
+
+path, mode, specs = sys.argv[1], sys.argv[2], sys.argv[3:]
+try:
+    data = json.load(open(path, encoding="utf-8"))
+except Exception:
+    data = []
+if not isinstance(data, list):
+    data = []
+data = [x for x in data if isinstance(x, dict) and isinstance(x.get("name"), str)]
+
+TIERS = ("fable", "mythos", "opus", "haiku", "sonnet")
+ALLOWED = (
+    "name", "labelOverride", "supports1m", "prefer1m",
+    "anthropicFamilyTier", "isFamilyDefault", "behavesAs", "maxEffort",
+)
+# Claude Desktop drops inferenceModels entries whose names contain another
+# vendor's name, even when behavesAs is set. Keep the same rule here instead
+# of writing a model the app will silently ignore.
+NON_ANTHROPIC = re.compile(
+    r"ark-code|astron|command-r|deepseek|doubao|gemini|gemma|glm|gpt|grok|"
+    r"hermes|hy3|kimi|lfm|\bling\b|llama|longcat|mimo|minimax|mistral|"
+    r"mixtral|moonshot|nemotron|openai|phi-|qianfan|qwen|tc-code|\bunic\b|"
+    r"yi-|stepfun|step-3|seed-|bytedance|hunyuan|granite|amazon\.nova|nova-|"
+    r"devstral|ministral|ernie|codex|arcee|trinity|abab|phi\d|\bk2\.|\bm2\.|"
+    r"jamba|arctic|solar|mercury|zamba|kat-coder|\bds-|dpsk/",
+    re.I,
+)
+
+def tier_for(name):
+    low = name.lower()
+    for tier in TIERS:
+        if tier in low:
+            return tier
+    return "sonnet"
+
+def clean(entry):
+    return {k: entry[k] for k in ALLOWED if k in entry}
+
+if mode == "add":
+    index = {x.get("name"): i for i, x in enumerate(data)}
+    for spec in specs:
+        parts = spec.split("=", 2)
+        name = parts[0].strip()
+        label = parts[1].strip() if len(parts) > 1 else ""
+        behaves = parts[2].strip() if len(parts) > 2 else ""
+        if not name:
+            raise SystemExit("пустой ID модели")
+        bad = NON_ANTHROPIC.search(name)
+        if bad:
+            raise SystemExit(
+                "Claude Desktop отбросит «%s»: в имени есть «%s». "
+                "Опубликуйте модель в CPA под alias с «claude-» или названием "
+                "семейства (sonnet, haiku) в имени, например sonnet-4-5-cpa, "
+                "и добавьте этот alias." % (name, bad.group(0))
+            )
+        entry = {
+            "name": name,
+            "supports1m": False,
+            "labelOverride": label or name,
+            "anthropicFamilyTier": tier_for(behaves or name),
+        }
+        if behaves:
+            # Lets Claude Desktop apply Claude's limits and effort levels to
+            # an alias it cannot identify, such as a DeepSeek gateway ID.
+            entry["behavesAs"] = behaves
+        if name in index:
+            data[index[name]] = entry
+        else:
+            index[name] = len(data)
+            data.append(entry)
+        print("добавлена модель:", name)
+else:
+    removing = {s.strip() for s in specs if s.strip()}
+    before = len(data)
+    data = [x for x in data if x.get("name") not in removing]
+    print("удалено моделей:", before - len(data))
+
+data = [clean(x) for x in data]
+os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+PY
+}
+
+# Comma-separated names of models added through --add-model, for logs.
+models_summary() {
+  python3 - "$MODELS_FILE" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+names = [x.get("name") for x in data if isinstance(x, dict) and x.get("name")]
+print(", ".join(names))
+PY
+}
+
 # Prints the lowercase host of a URL (no scheme, port, path or credentials).
 url_host() {
   local u="${1#*://}"
@@ -134,6 +262,15 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   --no-update          Не обновлять приложение.
   --no-restart         Записать конфиг, но не запускать Claude.
   --with-chat          Показать вкладку Chat (ей нужен вход в claude.ai).
+  --with-main-models   Добавить основные модели CPA (включено по умолчанию).
+  --claude-only        Только три базовые модели Claude, без DeepSeek,
+                       GPT и Gemini.
+  --list-models        Показать модели Claude, доступные ключу CPA.
+  --add-model SPEC     Добавить модель в список Claude. SPEC: ID,
+                       ID=Подпись или ID=Подпись=Claude-модель.
+                       Можно повторять. Пример:
+                       --add-model 'claude-opus-4-8=Opus 4.8'
+  --remove-model ID    Убрать модель, добавленную через --add-model.
   --key KEY            CPA API-ключ. Ключ, набранный в команде, остаётся
                        в истории терминала; безопаснее ввести его по запросу.
   --base-url URL       Адрес CPA (по умолчанию https://cpa.2brain.pro).
@@ -166,6 +303,27 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   - ~/Library/Application Support/Claude-3p/configLibrary/_meta.json
   - ~/Library/Application Support/Claude-3p/claude_desktop_config.json
 
+Список моделей:
+  - по умолчанию: claude-sonnet-5-5, claude-opus-5-5, claude-haiku-5-5;
+  - --add-model добавляет модель в inferenceModels и сохраняет выбор в
+    ~/.config/claude-desktop-cpa/models.json, поэтому повторный запуск
+    установщика его не потеряет;
+  - для моделей не от Anthropic нужен alias с «claude-» или названием
+    семейства (sonnet, haiku) в имени, опубликованный в CPA; третий
+    элемент задает Claude-модель, чьи лимиты и уровни effort использовать:
+    ID=Подпись=claude-sonnet-5;
+  - tier (sonnet/opus/haiku/fable/mythos) определяется по ID модели;
+  - после изменения списка Claude нужно перезапустить.
+
+Основные модели CPA:
+  - по умолчанию добавляются DeepSeek V4 Pro/Flash, GPT 6.2 Astra/Sol,
+    GPT-6 Luna и Gemini 4 Argon;
+  - alias для них создаются один раз на сервере скриптом
+    scripts/sync-cpa-main-models.py (нужен management key);
+  - обычному пользователю management key не нужен: установщик только
+    проверяет доступ и записывает alias в профиль Claude;
+  - --claude-only оставляет только три базовые модели Claude.
+
 Источник установки:
   - официальный Homebrew cask claude (ZIP), актуальная версия из
     https://formulae.brew.sh/api/cask/claude.json;
@@ -189,6 +347,13 @@ parse_args() {
       --no-update) DO_UPDATE=0 ;;
       --no-restart) DO_RESTART=0 ;;
       --with-chat) WITH_CHAT=1 ;;
+      --with-main-models) WITH_MAIN_MODELS=1 ;;
+      --claude-only) WITH_MAIN_MODELS=0 ;;
+      --list-models) LIST_MODELS=1; DO_INSTALL=0; DO_UPDATE=0; DO_CONFIGURE=0; DO_RESTART=0 ;;
+      --add-model) shift; [[ $# -gt 0 ]] || die "--add-model требует значение"; ADD_MODELS+=("$1") ;;
+      --add-model=*) ADD_MODELS+=("${1#*=}") ;;
+      --remove-model) shift; [[ $# -gt 0 ]] || die "--remove-model требует значение"; REMOVE_MODELS+=("$1") ;;
+      --remove-model=*) REMOVE_MODELS+=("${1#*=}") ;;
       --force) FORCE=1 ;;
       --yes) ASSUME_YES=1 ;;
       --ask-key) ASK_KEY=1 ;;
@@ -700,6 +865,62 @@ PY
 }
 
 # Asks for a key on the terminal (up to 3 attempts); dies when none works.
+# One cheap request to see whether the current CPA key can use an alias.
+probe_model() {
+  local model="$1" hdr body req code
+  hdr="$(new_tmp_file)"
+  body="$(new_tmp_file)"
+  req="$(new_tmp_file)"
+  printf 'x-api-key: %s\n' "$KEY" > "$hdr"
+  printf '{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}\n' "$model" > "$req"
+  code="$(curl -sS --max-time 45 -o "$body" -w '%{http_code}' \
+    -X POST "$BASE_URL/v1/messages" \
+    -H @"$hdr" \
+    -H 'anthropic-version: 2023-06-01' \
+    -H 'content-type: application/json' \
+    --data-binary @"$req" 2>/dev/null || echo 000)"
+  case "$code" in
+    200)
+      python3 - "$body" <<'PY' >/dev/null 2>&1
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if data.get("type") == "message" else 1)
+PY
+      ;;
+    429|5*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Add only the main models that the configured CPA key can actually use.
+apply_main_models() {
+  local -a good=()
+  local -a skipped=()
+  local spec alias
+  log "Проверяю основные модели CPA..."
+  for spec in "${MAIN_MODEL_SPECS[@]}"; do
+    alias="${spec%%=*}"
+    if probe_model "$alias"; then
+      good+=("$spec")
+      log "  $alias: OK"
+    else
+      skipped+=("$alias")
+    fi
+  done
+  if [[ ${#good[@]} -eq 0 ]]; then
+    warn "Основные модели CPA недоступны этому ключу; добавляю только Claude."
+    warn "Если нужны только Claude-модели, используй --claude-only."
+    return 0
+  fi
+  if [[ ${#skipped[@]} -gt 0 ]]; then
+    warn "Пропущены модели без доступа: ${skipped[*]}"
+  fi
+  update_models_file add "${good[@]}"
+}
+
 prompt_key() {
   have_tty || die "Нет терминала для ввода ключа. Передай --key или CPA_API_KEY."
   local _
@@ -829,6 +1050,34 @@ resolve_key() {
   warn "Записываю конфиг с ключом из $KEY_SOURCE несмотря на ошибку проверки (--force)."
 }
 
+list_models() {
+  resolve_key || die "Не удалось получить рабочий CPA-ключ."
+  local hdr body code
+  hdr="$(new_tmp_file)"
+  body="$(new_tmp_file)"
+  printf 'x-api-key: %s\n' "$KEY" > "$hdr"
+  code="$(curl -sS --max-time 30 -o "$body" -w '%{http_code}' -H @"$hdr" "$BASE_URL/v1/models" 2>/dev/null || echo 000)"
+  [[ "$code" == "200" ]] || die "CPA /v1/models вернул HTTP $code"
+  python3 - "$body" <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    raise SystemExit("не удалось разобрать ответ /v1/models")
+ids = sorted({m.get("id") for m in (data.get("data") or []) if isinstance(m, dict) and m.get("id")})
+claude = [i for i in ids if i.lower().startswith("claude")]
+other = [i for i in ids if i not in claude]
+print("Модели Claude, доступные ключу CPA:")
+for i in claude:
+    print("  " + i)
+print()
+print("Прочие модели: %d. Через CPA они возможны, но в Claude Desktop" % len(other))
+print("не тестировались: приложение отправляет Anthropic-формат запросов.")
+print()
+print("Пример: claude-desktop-cpa --add-model 'claude-opus-4-8=Opus 4.8' --configure-only")
+PY
+}
+
 inspect_config() {
   python3 - "$SUPPORT_DIR" "$BASE_URL" <<'PY'
 import hashlib, json, os, sys
@@ -884,10 +1133,10 @@ write_config() {
   keyfile="$(new_tmp_file)"
   printf '%s' "$KEY" > "$keyfile"
 
-  python3 - "$SUPPORT_DIR" "$BASE_URL" "$WITH_CHAT" "$PROFILE_NAME" "$keyfile" <<'PY'
+  python3 - "$SUPPORT_DIR" "$BASE_URL" "$WITH_CHAT" "$PROFILE_NAME" "$keyfile" "$MODELS_FILE" <<'PY'
 import datetime, json, os, shutil, sys, uuid
 
-support, base, with_chat_s, profile_name, keyfile = sys.argv[1:6]
+support, base, with_chat_s, profile_name, keyfile, models_file = sys.argv[1:7]
 base = base.rstrip("/")
 with_chat = with_chat_s == "1"
 key = open(keyfile, encoding="utf-8").read().strip()
@@ -963,6 +1212,37 @@ models = [
     {"name": "claude-opus-5-5", "supports1m": False, "labelOverride": "Claude Opus 5.5", "anthropicFamilyTier": "opus"},
     {"name": "claude-haiku-5-5", "supports1m": False, "labelOverride": "Claude Haiku 5.5", "anthropicFamilyTier": "haiku"},
 ]
+
+# Extra models added through --add-model. Built-ins stay first, so Sonnet 5.5
+# remains the default model; extras are appended in the order they were added.
+try:
+    extra_models = json.load(open(models_file, encoding="utf-8"))
+except Exception:
+    extra_models = []
+if isinstance(extra_models, list):
+    allowed = (
+        "name", "labelOverride", "supports1m", "prefer1m",
+        "anthropicFamilyTier", "isFamilyDefault", "behavesAs", "maxEffort",
+    )
+    seen = {m["name"] for m in models}
+    for entry in extra_models:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip() or name in seen:
+            continue
+        item = {k: entry[k] for k in allowed if k in entry}
+        item["name"] = name
+        item.setdefault("supports1m", False)
+        if item.get("anthropicFamilyTier") not in ("sonnet", "opus", "haiku", "fable", "mythos"):
+            low = name.lower()
+            item["anthropicFamilyTier"] = next(
+                (t for t in ("fable", "mythos", "opus", "haiku", "sonnet") if t in low),
+                "sonnet",
+            )
+        models.append(item)
+        seen.add(name)
+
 profile.update({
     "coworkEgressAllowedHosts": ["*"],
     "inferenceProvider": "gateway",
@@ -1135,6 +1415,20 @@ main() {
   parse_args "$@"
   require_env
 
+  if [[ "$LIST_MODELS" -eq 1 ]]; then
+    list_models
+    exit 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 0 && "$CHECK" -eq 0 ]]; then
+    if [[ ${#ADD_MODELS[@]} -gt 0 ]]; then
+      update_models_file add "${ADD_MODELS[@]}"
+    fi
+    if [[ ${#REMOVE_MODELS[@]} -gt 0 ]]; then
+      update_models_file remove "${REMOVE_MODELS[@]}"
+    fi
+  fi
+
   if [[ "$CHECK" -eq 1 ]]; then
     check_mode
   fi
@@ -1153,6 +1447,16 @@ main() {
     fi
     log "3P config: $SUPPORT_DIR"
     log "models: $MODEL_SONNET, $MODEL_OPUS, $MODEL_HAIKU"
+    if [[ "$WITH_MAIN_MODELS" -eq 1 ]]; then
+      log "main models:"
+      local main_spec
+      for main_spec in "${MAIN_MODEL_SPECS[@]}"; do
+        log "  ${main_spec%%=*}"
+      done
+    fi
+    local extra
+    extra="$(models_summary)"
+    [[ -n "$extra" ]] && log "extra models: $extra"
     resolve_key || true
     log "Были бы записаны профиль CPA, _meta.json и deploymentMode=3p."
     log "Claude был бы перезапущен: $([[ "$DO_RESTART" -eq 1 ]] && echo yes || echo no)."
@@ -1168,6 +1472,9 @@ main() {
   if [[ "$DO_CONFIGURE" -eq 1 ]]; then
     resolve_key
     KEY_SOURCE="${KEY_SOURCE:-unknown}"
+    if [[ "$WITH_MAIN_MODELS" -eq 1 ]]; then
+      apply_main_models
+    fi
     quit_app
     write_config
     if [[ "$DO_RESTART" -eq 1 ]]; then
@@ -1182,6 +1489,9 @@ main() {
   log "Claude Desktop: $(app_version 2>/dev/null || echo unknown)"
   log "3P профиль: $SUPPORT_DIR/configLibrary"
   log "Модели: $MODEL_SONNET, $MODEL_OPUS, $MODEL_HAIKU"
+  local extra
+  extra="$(models_summary)"
+  [[ -n "$extra" ]] && log "Доп. модели: $extra"
   log "Открой вкладку Code. Chat по-прежнему требует claude.ai-аккаунт."
   log "Первый запуск Code может скачивать runtime — это не авторизация."
 }
