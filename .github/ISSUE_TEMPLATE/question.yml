@@ -1,0 +1,17 @@
+name: Вопрос или предложение
+description: Что-то непонятно в инструкции или есть идея, как сделать лучше
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Ваш вопрос или предложение
+    validations:
+      required: true
+  - type: checkboxes
+    id: no-secrets
+    attributes:
+      label: Проверка
+      options:
+        - label: В обращении нет ключа CPA и других секретов.
+          required: true
