@@ -59,11 +59,13 @@ STATE = {
                 entry("claude-haiku-5-5", "claude-haiku-5-5", "anthropic"),
                 entry("sonnet-6-2-sol-cpa", "gpt-6.2-sol"),
             ],
+            "aliases": [{"alias": "claude-sonnet-5-5"}, {"alias": "claude-haiku-5-5"}, {"alias": "sonnet-6-2-sol-cpa"}],
         },
         {
             "id": "k2", "name": "other-user", "enabled": True, "rpm": 0,
             "daily_limit_usd": 0, "weekly_limit_usd": 0, "allow_models_endpoint": True,
             "models": [],
+            "aliases": [],
         },
     ],
 }
@@ -116,7 +118,13 @@ class Handler(BaseHTTPRequestHandler):
             payload = self._body()
             for i, key in enumerate(STATE["keys"]):
                 if key["id"] == payload["id"]:
-                    STATE["keys"][i] = {**key, **payload}
+                    merged = {**key, **payload}
+                    if "aliases" not in payload:
+                        # The defect documented for the real Key Policy: a PATCH that
+                        # does not carry `aliases` is reported as a success, but the
+                        # stored rights are rolled back to the previous state.
+                        merged["models"] = key["models"]
+                    STATE["keys"][i] = merged
                     return self._send(200, {})
         self._send(404, {})
 
@@ -197,6 +205,10 @@ def main():
     for wanted in ("claude-opus-5-5", *new_aliases):
         if wanted not in have:
             fail("the key did not get " + wanted)
+        if wanted not in names(k1["aliases"]):
+            fail("the key's `aliases` field does not list " + wanted)
+    if set(names(k1["aliases"])) != set(have):
+        fail("the key's `aliases` and `models` fields are not consistent")
     if len(have) != len(set(have)):
         fail("the key has duplicate models")
     for field in ("name", "enabled", "rpm", "daily_limit_usd", "weekly_limit_usd", "allow_models_endpoint"):

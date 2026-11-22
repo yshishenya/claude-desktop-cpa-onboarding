@@ -141,6 +141,14 @@ def key_model_entries(key: dict, alias: str) -> list[dict]:
     ]
 
 
+def key_alias_names(key: dict) -> set[str]:
+    """Alias names in the key's `aliases` field (entries are {"alias": name} or plain names)."""
+    return {
+        item.get("alias") if isinstance(item, dict) else item
+        for item in (key.get("aliases") or [])
+    }
+
+
 def build_route(source: dict) -> dict:
     route = {
         "alias": source["alias"],
@@ -276,6 +284,15 @@ def main() -> int:
     for key, additions in key_updates:
         models = list(key.get("models") or [])
         models.extend(additions)
+        # Key Policy keeps the allowed aliases in two fields, `models` and
+        # `aliases`. A PATCH that changes only one of them reports success but can
+        # be rolled back from the other, so both are sent and kept consistent.
+        aliases_field = list(key.get("aliases") or [])
+        present = key_alias_names(key)
+        for item in additions:
+            if item["alias"] not in present:
+                present.add(item["alias"])
+                aliases_field.append({"alias": item["alias"]})
         payload = {
             "id": key["id"],
             "name": key.get("name", ""),
@@ -285,6 +302,7 @@ def main() -> int:
             "weekly_limit_usd": key.get("weekly_limit_usd", 0),
             "allow_models_endpoint": key.get("allow_models_endpoint", True),
             "models": models,
+            "aliases": aliases_field,
         }
         api("PATCH", api_base + "/keys", token, payload)
         print(f"  обновлён ключ {key.get('name') or key['id']}")
@@ -305,7 +323,11 @@ def main() -> int:
                 continue
             if not key_model_entries(after, model["alias"]):
                 problems.append(
-                    f"{key.get('name') or key['id']}: нет {model['alias']}"
+                    f"{key.get('name') or key['id']}: нет {model['alias']} в models"
+                )
+            if model["alias"] not in key_alias_names(after):
+                problems.append(
+                    f"{key.get('name') or key['id']}: нет {model['alias']} в aliases"
                 )
     if problems:
         print("\nПроверка не прошла:")
