@@ -255,7 +255,8 @@ ManifestType: installer
     Update-CpaModelFile -Mode remove -Spec 'a-sonnet' 6>$null
     Assert-Equal 'remove keeps the other models' ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ',') 'b-opus'
     Update-CpaModelFile -Mode remove -Spec 'b-opus' 6>$null
-    Assert-Equal 'removing everything leaves an empty JSON array' ((Get-Content -Raw -LiteralPath $modelFile).Trim()) '[]'
+    # Windows PowerShell 5.1 puts line breaks inside the empty array, so ignore whitespace.
+    Assert-Equal 'removing everything leaves an empty JSON array' ((Get-Content -Raw -LiteralPath $modelFile) -replace '\s', '') '[]'
 
     # Main models and -ListModels, with the HTTP layer stubbed.
     $script:stubStatus = @{}
