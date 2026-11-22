@@ -1,6 +1,9 @@
 # Offline tests for install.ps1. Runs in Windows PowerShell 5.1 and PowerShell 7.
 # Every helper reads USERPROFILE / LOCALAPPDATA at call time, so both point at
 # a temporary folder for the whole run: real user settings are never read.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingInvokeExpression', '', Justification = 'Users start the installer with `irm | iex`; the test reproduces exactly that.')]
+[CmdletBinding()]
+param()
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $installer = Join-Path $repo 'install.ps1'
@@ -130,7 +133,7 @@ ManifestType: installer
     # --- key resolution without network (validation and prompts are stubbed) --
     function Test-CpaKey { param([string]$ApiKey) return ($ApiKey -eq 'new-key') }
     function Test-CpaInteractive { return $script:fakeInteractive }
-    function Read-CpaSecret { param([string]$Prompt) return 'new-key' }
+    function Read-CpaSecret { param([string]$Prompt) $null = $Prompt; return 'new-key' }
 
     $script:fakeInteractive = $false
     $script:Opt.AskKey = $true; $script:Opt.Yes = $true
