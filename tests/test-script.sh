@@ -138,4 +138,21 @@ expect "rejected stored key falls back to a prompt" "$out" "new-key|interactive"
 
 bash "$repo_dir/tests/test-models.sh"
 
+# --- key input: paste artifacts are cleaned, rejections are explained ---------
+[[ "$(clean_key $'\033[200~  sk-abc-123 \t\033[201~\r')" == "sk-abc-123" ]] \
+  || fail "clean_key must strip paste markers, control characters and surrounding whitespace"
+[[ "$(clean_key $'\n  sk-abc-123\n')" == "sk-abc-123" ]] \
+  || fail "clean_key must trim a leading blank line, not only trailing whitespace"
+[[ "$(clean_key $'\n\t \n')" == "" ]] || fail "clean_key of only whitespace must be empty"
+[[ "$(clean_key 'sk-ab c')" == "sk-ab c" ]] || fail "clean_key must not touch the inside of a key"
+[[ -z "$(clean_key '')" ]] || fail "clean_key of an empty value must stay empty"
+
+out="$(describe_key 'sk-clb-abc' 2>&1)"
+grep -q 'Введено символов: 10, отпечаток: [0-9a-f]\{8\}' <<<"$out" || fail "describe_key must report length and fingerprint"
+if grep -q 'sk-clb-abc' <<<"$out"; then fail "describe_key must never print the key"; fi
+out="$(describe_key $'sk-\xd1\x81lb-abc' 2>&1)"
+grep -q 'не из латиницы' <<<"$out" || fail "describe_key must flag lookalike and invisible characters"
+out="$(describe_key 'sk-clb abc' 2>&1)"
+grep -q 'пробел' <<<"$out" || fail "describe_key must flag a space inside the key"
+
 echo "static checks OK"

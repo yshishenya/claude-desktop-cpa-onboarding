@@ -198,6 +198,25 @@ ManifestType: installer
     Assert-Equal 'config state: key kind' $state.key_kind 'direct'
     Assert-Equal 'config state: deploymentMode' $state.deploymentMode '3p'
 
+    # --- key input ---------------------------------------------------------------------
+    # This file is ASCII only: build the lookalike with a character code.
+    $esc = [string][char]27
+    Assert-Equal 'clean key strips paste markers, control characters and spaces' (ConvertTo-CpaCleanKey ($esc + '[200~  sk-abc-123 ' + [char]9 + $esc + '[201~' + [char]13)) 'sk-abc-123'
+    Assert-Equal 'clean key trims a leading blank line' (ConvertTo-CpaCleanKey ([string][char]10 + '  sk-abc-123' + [char]10)) 'sk-abc-123'
+    Assert-Equal 'clean key keeps the inside of a key' (ConvertTo-CpaCleanKey 'sk-ab c') 'sk-ab c'
+    Assert-Equal 'clean key of nothing is empty' (ConvertTo-CpaCleanKey $null) ''
+
+    $diag = (& { Write-CpaKeyDiagnostic 'sk-clb-abc' } 6>&1 | Out-String)
+    Assert-True 'diagnostic reports length and fingerprint' ($diag -match ': 10, [^:]+: [0-9a-f]{8}\.')
+    Assert-True 'diagnostic never prints the key' (-not $diag.Contains('sk-clb-abc'))
+    Assert-True 'a plain key gets no extra hint' ((([regex]::Matches($diag, 'WARN')).Count -eq 1))
+    $lookalike = 'sk-' + [char]0x0441 + 'lb-abc'
+    $diag = (& { Write-CpaKeyDiagnostic $lookalike } 6>&1 | Out-String)
+    Assert-True 'diagnostic flags a Cyrillic lookalike' (($diag -match '\u043d\u0435\u0432\u0438\u0434\u0438\u043c\u044b\u0435') -and -not ($diag -match '\u043f\u0440\u043e\u0431\u0435\u043b'))
+    Assert-Equal 'a lookalike key counts its UTF-8 bytes' ([regex]::Match($diag, ': (\d+),').Groups[1].Value) '11'
+    $diag = (& { Write-CpaKeyDiagnostic 'sk-clb abc' } 6>&1 | Out-String)
+    Assert-True 'diagnostic mentions a space inside the key' (($diag -match '\u043f\u0440\u043e\u0431\u0435\u043b') -and -not ($diag -match '\u043d\u0435\u0432\u0438\u0434\u0438\u043c\u044b\u0435'))
+
     # --- models --------------------------------------------------------------------
     Assert-True 'main models are on by default' ([bool]$script:Opt.MainModels)
     $modelFile = Get-CpaModelFile

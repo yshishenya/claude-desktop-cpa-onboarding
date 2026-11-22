@@ -729,6 +729,30 @@ function Get-CpaKeyFromCodex {
     return ''
 }
 
+# Removes what a paste can add around a key: terminal escape sequences, other
+# control characters and surrounding whitespace. The inside of the key is kept.
+function ConvertTo-CpaCleanKey {
+    param([string]$Value)
+    if (-not $Value) { return '' }
+    $clean = [regex]::Replace($Value, '\x1b\[[0-9;]*[A-Za-z~]', '')
+    $clean = [regex]::Replace($clean, '[\x00-\x08\x0B-\x1F\x7F]', '')
+    return $clean.Trim()
+}
+
+# Says what was actually received, without showing the key. A typo, a lost
+# character or an invisible or lookalike character shows up when the length and
+# fingerprint are compared with the issued key.
+function Write-CpaKeyDiagnostic {
+    param([string]$ApiKey)
+    $bytes = [System.Text.Encoding]::UTF8.GetByteCount($ApiKey)
+    Write-CpaWarn ('Введено символов: {0}, отпечаток: {1}. Сверьте с выданным ключом.' -f $bytes, (Get-CpaFingerprint $ApiKey))
+    if ($ApiKey -match '[^\x20-\x7E]') {
+        Write-CpaWarn 'В ключе есть невидимые знаки или символы не из латиницы (например, русская «с» вместо латинской c). Скопируйте ключ ещё раз.'
+    } elseif ($ApiKey -match '\s') {
+        Write-CpaWarn 'В середине ключа есть пробел. Скопируйте ключ целиком, без переносов.'
+    }
+}
+
 function Test-CpaKey {
     param([string]$ApiKey)
     $base = $script:Opt.BaseUrl
@@ -736,6 +760,7 @@ function Test-CpaKey {
     $models = Invoke-CpaHttp -Url ($base + '/v1/models') -Headers $headers -TimeoutSec 25
     if ($models.Status -ne 200) {
         Write-CpaWarn ("CPA /v1/models вернул HTTP $($models.Status) — ключ не принят.")
+        if (@(400, 401, 403) -contains $models.Status) { Write-CpaKeyDiagnostic $ApiKey }
         return $false
     }
     try {
@@ -771,7 +796,7 @@ function Read-CpaKeyInteractive {
     for ($i = 0; $i -lt 3; $i++) {
         $candidate = Read-CpaSecret 'CPA API key (символы не отображаются)'
         if (-not $candidate) { continue }
-        $candidate = $candidate.Trim()
+        $candidate = ConvertTo-CpaCleanKey $candidate
         if (Test-CpaKey $candidate) {
             $script:CpaKey = $candidate
             $script:CpaKeySource = 'interactive'
@@ -789,9 +814,13 @@ function Resolve-CpaKey {
     $readOnly = ($script:Opt.Check -or $script:Opt.DryRun)
 
     # An explicitly supplied key is authoritative.
+    # A key copied from a chat or an email often carries an extra space, a line
+    # break or terminal escape codes, so it is cleaned first.
+    $optKey = ConvertTo-CpaCleanKey $script:Opt.Key
+    $envKey = ConvertTo-CpaCleanKey $env:CPA_API_KEY
     $explicit = @()
-    if ($script:Opt.Key) { $explicit += , @('-Key', $script:Opt.Key) }
-    elseif ($env:CPA_API_KEY) { $explicit += , @('CPA_API_KEY', $env:CPA_API_KEY) }
+    if ($optKey) { $explicit += , @('-Key', $optKey) }
+    elseif ($envKey) { $explicit += , @('CPA_API_KEY', $envKey) }
     if ($explicit.Count -gt 0) {
         $source = $explicit[0][0]; $value = $explicit[0][1]
         Write-CpaLog ("Проверяю ключ из $source...")
