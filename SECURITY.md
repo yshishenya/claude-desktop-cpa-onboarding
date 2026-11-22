@@ -21,16 +21,24 @@
 1. Сразу попросите администратора CPA отозвать этот ключ и выдать новый.
 2. Удалите сообщение с ключом, если это возможно.
 3. Запустите перенастройку и введите новый ключ, когда скрипт попросит.
-   Параметр `--ask-key` не даёт скрипту взять старый ключ из сохранённых
-   настроек:
+   Параметр `--ask-key` (на Windows — `-AskKey`) не даёт скрипту взять
+   старый ключ из сохранённых настроек:
+
+   На Mac (Терминал):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --configure-only --ask-key
    ```
 
+   На Windows (PowerShell):
+
+   ```powershell
+   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -ConfigureOnly -AskKey
+   ```
+
 4. Если старый ключ записан также в настройках Claude Code
    (`~/.claude/settings.json`) или Codex (`~/.codex/config.toml`), замените
-   его и там.
+   его и там. На Windows эти файлы лежат в папке `%USERPROFILE%`.
 
 ## Что считается проблемой безопасности
 

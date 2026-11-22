@@ -1,483 +1,308 @@
 # Claude Desktop через CPA
 
-[![Проверка установщика](https://github.com/yshishenya/claude-desktop-cpa-onboarding/actions/workflows/test.yml/badge.svg)](https://github.com/yshishenya/claude-desktop-cpa-onboarding/actions/workflows/test.yml)
-[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple)](#что-понадобится)
+[![Проверка установщиков](https://github.com/yshishenya/claude-desktop-cpa-onboarding/actions/workflows/test.yml/badge.svg)](https://github.com/yshishenya/claude-desktop-cpa-onboarding/actions/workflows/test.yml)
+[![Релиз](https://img.shields.io/github/v/release/yshishenya/claude-desktop-cpa-onboarding?label=версия)](https://github.com/yshishenya/claude-desktop-cpa-onboarding/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](#windows)
+[![macOS](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple)](#macos)
 [![Лицензия: MIT](https://img.shields.io/badge/лицензия-MIT-blue)](LICENSE)
 
-Одна команда, которая ставит на Mac приложение **Claude Desktop** и
-настраивает его на работу через **CPA**. CPA — это сервис-посредник: через
-него ваша команда получает доступ к моделям Claude по своему ключу, без
-отдельного аккаунта на claude.ai.
+Установщик ставит **Claude Desktop** и подключает его к серверу **CPA**.
+Нужно выполнить одну команду и один раз ввести выданный вам ключ.
+**Входить в аккаунт claude.ai не нужно.** Работать можно во вкладке **Code**.
+Вкладке **Chat** по-прежнему нужен личный аккаунт claude.ai.
 
-После настройки вы работаете во вкладке **Code** приложения Claude. Вкладка
-**Chat** в этом режиме не используется: ей по-прежнему нужен личный аккаунт
-claude.ai.
+## Выберите вашу систему
 
-## Содержание
+| Если у вас | Перейдите к инструкции |
+|---|---|
+| Компьютер с Windows 10 или 11 | [Настройка Windows](#windows) |
+| MacBook, iMac или Mac mini (macOS 13 или новее) | [Настройка macOS](#macos) |
 
-- [Что понадобится](#что-понадобится)
-- [Установка за 3 шага](#установка-за-3-шага)
-- [Как понять, что всё получилось](#как-понять-что-всё-получилось)
-- [Если что-то пошло не так](#если-что-то-пошло-не-так)
-- [Проверка, обновление и повторная настройка](#проверка-обновление-и-повторная-настройка)
-- [Другие модели](#другие-модели)
-- [Основные модели CPA](#основные-модели-cpa)
-- [Как вернуть всё обратно](#как-вернуть-всё-обратно)
-- [Безопасность и ваши данные](#безопасность-и-ваши-данные)
-- [Подробности для специалистов](#подробности-для-специалистов)
-- [Помощь и обратная связь](#помощь-и-обратная-связь)
+Понадобятся ключ CPA ([где взять](#где-взять-ключ)) и интернет.
 
-## Что понадобится
+---
 
-- **Mac с macOS 13 Ventura или новее.** Подходят и процессоры Apple
-  (M1, M2 и новее), и Intel.
-- **Ключ CPA** — строка, похожая на `sk-...`. Его выдаёт тот, кто управляет
-  вашим доступом к CPA. У ключа должен быть доступ к моделям Claude.
-- **Интернет.** Скрипт обращается к `cpa.2brain.pro` (проверка ключа),
-  `formulae.brew.sh` (сведения о последней версии) и `downloads.claude.ai`
-  (само приложение).
-- **Иногда пароль администратора Mac.** Он нужен, только если ваша учётная
-  запись не может сама устанавливать программы в папку «Программы».
+## Windows
 
-## Установка за 3 шага
+### Шаг 1. Откройте PowerShell
 
-**1. Откройте «Терминал».** Нажмите <kbd>⌘ Command</kbd> + <kbd>Пробел</kbd>,
-наберите `Терминал` и нажмите <kbd>Enter</kbd>.
+1. Нажмите кнопку **Пуск**.
+2. Напечатайте `PowerShell`.
+3. Откройте **Windows PowerShell**.
 
-**2. Скопируйте команду, вставьте её в Терминал и нажмите <kbd>Enter</kbd>:**
+Запускать от имени администратора не нужно.
+
+> [!NOTE]
+> Не используйте «Командную строку» (`cmd`). Нужен именно **PowerShell**
+> с синим значком.
+
+### Шаг 2. Скопируйте и запустите команду
+
+```powershell
+irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1 | iex
+```
+
+Вставьте строку в PowerShell сочетанием <kbd>Ctrl</kbd> + <kbd>V</kbd> и
+нажмите <kbd>Enter</kbd>.
+
+### Шаг 3. Введите ключ
+
+Когда скрипт попросит `CPA API key`, вставьте ключ и нажмите <kbd>Enter</kbd>.
+Вместо ключа на экране будут звёздочки или пустота — это нормально.
+
+Если ключ уже есть в настройках Claude Code или Codex, скрипт найдёт его сам и
+не спросит.
+
+### Шаг 4. Дождитесь «Готово.»
+
+Установка занимает несколько минут: пакет весит около 300 МБ. В конце
+откроется Claude. Перейдите на вкладку **Code**: в списке моделей будут
+Claude Sonnet 5.5, Opus 5.5 и Haiku 5.5.
+
+---
+
+## macOS
+
+### Шаг 1. Откройте Терминал
+
+1. Нажмите <kbd>Command</kbd> + <kbd>Пробел</kbd>.
+2. Напечатайте `Терминал`.
+3. Нажмите <kbd>Enter</kbd>.
+
+### Шаг 2. Скопируйте и запустите команду
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash
 ```
 
-**3. Введите ключ CPA, когда скрипт попросит**, и нажмите <kbd>Enter</kbd>.
-Символы при вводе не отображаются — так и задумано, ключ всё равно вводится.
-Если скрипт попросит пароль, введите пароль от вашего Mac (он тоже не
-отображается).
+Вставьте строку в Терминал сочетанием <kbd>Command</kbd> + <kbd>V</kbd> и
+нажмите <kbd>Enter</kbd>.
 
-Скрипт сам скачает Claude Desktop, проверит, что это подлинное приложение
-Anthropic, настроит его и запустит. Обычно это занимает несколько минут.
+### Шаг 3. Введите ключ
 
-> [!TIP]
-> Если ключ CPA уже настроен у вас в Claude Code или Codex, скрипт найдёт
-> его сам и не будет спрашивать. Подробнее — в разделе
-> [«Безопасность и ваши данные»](#безопасность-и-ваши-данные).
+Когда скрипт попросит `CPA API key`, вставьте ключ и нажмите <kbd>Enter</kbd>.
+Символы **не отображаются** — это нормально.
 
-## Как понять, что всё получилось
+Если скрипт попросит пароль, введите пароль от вашего Mac. Он нужен, только
+если учётная запись не может сама ставить программы.
 
-1. В конце Терминал напишет **«Готово.»**.
-2. Откроется приложение **Claude**.
-3. Перейдите на вкладку **Code**. В списке моделей должны быть
-   Claude Sonnet 5.5, Claude Opus 5.5 и Claude Haiku 5.5. Если на сервере
-   настроены основные модели CPA, рядом появятся DeepSeek, GPT и Gemini.
+Если ключ уже есть в настройках Claude Code или Codex, скрипт найдёт его сам и
+не спросит.
 
-При **первом** открытии вкладки Code приложение докачивает свои рабочие
-компоненты. Это может занять несколько минут. Это не вход в аккаунт и не
-ошибка: просто дождитесь окончания загрузки.
+### Шаг 4. Дождитесь «Готово.»
+
+В конце откроется Claude. Перейдите на вкладку **Code**: в списке моделей будут
+Claude Sonnet 5.5, Opus 5.5 и Haiku 5.5.
+
+---
+
+## Где взять ключ
+
+Ключ выдаёт администратор вашего CPA. Установщик его не создаёт.
+
+> [!WARNING]
+> Не отправляйте ключ в чат, письмо или обращение на GitHub и не делайте с ним
+> снимков экрана.
+
+## Что делает установщик
+
+1. Скачивает официальное приложение Claude Desktop с сайта Anthropic и
+   проверяет его подлинность: контрольную сумму и подпись Anthropic (на Mac ещё
+   и проверку Apple). Чужое приложение не ставится.
+2. Не ставит старую версию поверх новой.
+3. Проверяет ключ на сервере CPA.
+4. Сохраняет прежние настройки в резервную копию (последние пять).
+5. Записывает настройку подключения к CPA и запускает Claude.
+6. Добавляет рядом с Claude основные модели CPA (DeepSeek, GPT, Gemini), если
+   ваш ключ их открывает. Только Claude: `--claude-only` на Mac,
+   `-ClaudeOnly` на Windows.
 
 ## Если что-то пошло не так
 
-| Что вы видите | Что это значит и что делать |
+| Что вы видите | Что делать |
 |---|---|
-| `Ключ ... не прошёл проверку` или `HTTP 401` | Ключ введён с ошибкой или не действует. Скопируйте ключ ещё раз целиком, без пробелов, и запустите команду снова. |
-| `Ключ принят ..., но Claude-модель вернула HTTP ...` | Ключ рабочий, но к моделям Claude у него нет доступа. Попросите администратора CPA включить доступ к Claude для вашего ключа. |
-| `HTTP 429` или `HTTP 5xx` | Сервер временно перегружен. Настройка всё равно записана; повторите проверку позже. |
-| `нужен пароль администратора, но терминал недоступен` | Скрипт запущен не из приложения «Терминал». Откройте «Терминал» и запустите команду там. |
-| `Пароль администратора не принят` | Введён неверный пароль или у учётной записи нет прав администратора. Попросите администратора Mac запустить команду. |
-| `не прошло проверку подлинности` | Скачанный файл не похож на подлинное приложение Anthropic, и скрипт ничего не установил. Проверьте подключение к интернету и попробуйте позже. Если ошибка повторяется, [сообщите о ней](#помощь-и-обратная-связь). |
-| `Не удалось закрыть Claude` | Закройте Claude вручную (<kbd>⌘ Command</kbd> + <kbd>Q</kbd>) и запустите команду снова. |
-| Во вкладке Code долго идёт загрузка | Это первая докачка компонентов. Подождите несколько минут, не закрывая приложение. |
-| Вкладка Chat просит войти в аккаунт | Так и должно быть: Chat работает только с аккаунтом claude.ai. Для работы через CPA используйте вкладку Code. |
+| `HTTP 401`, `Ключ ... не прошёл проверку` | Ключ введён с ошибкой или не действует. Скопируйте его целиком, без пробелов, и запустите команду снова. |
+| `Claude-модель вернула HTTP ...` | У ключа нет доступа к Claude. Попросите администратора CPA включить его. |
+| `не прошло проверку подлинности`, `Контрольная сумма ... не совпала` | Скрипт ничего не установил. Попробуйте позже. Если повторяется — [сообщите](#помощь). |
+| `Не удалось закрыть Claude` | Закройте Claude вручную и запустите команду снова. На Windows закройте и значок Claude у часов. |
+| **Mac:** `нужен пароль администратора, но терминал недоступен` | Запустите команду в приложении «Терминал». |
+| **Windows:** `0x80073CFF` | Windows запрещает ставить приложения не из Microsoft Store. Попросите администратора включить «Allow all trusted apps to install». |
+| **Windows:** `старая версия Claude Desktop (установщик .exe)` | Вкладка Code работает. Режиму Cowork нужна новая версия: удалите Claude в «Параметры → Приложения» и запустите команду снова. |
+| В Code долго идёт загрузка | Это первая докачка компонентов. Подождите несколько минут. |
+| Вкладка Chat просит войти | Так и должно быть. Используйте вкладку Code. |
 
-Не нашли свою ситуацию? Запустите [проверку](#проверка-обновление-и-повторная-настройка)
-и приложите её результат к [обращению](#помощь-и-обратная-связь). Проверка не
-показывает сам ключ, только его короткий отпечаток.
+Не помогло? Запустите [проверку](#проверка-и-смена-ключа) и приложите её
+результат к [обращению](#помощь). Ключ в результате не показывается.
 
-## Проверка, обновление и повторная настройка
+## Проверка и смена ключа
 
-Все команды ниже запускаются в Терминале так же, как установка. Слова после
-`bash -s --` — это то, что нужно сделать.
+**Windows** (PowerShell):
 
-Проверить, всё ли настроено (ничего не меняет):
+```powershell
+# проверить, всё ли настроено (ничего не меняет)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -Check
+
+# ввести новый ключ
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -ConfigureOnly -AskKey
+```
+
+**macOS** (Терминал):
 
 ```bash
+# проверить, всё ли настроено (ничего не меняет)
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --check
-```
 
-Обновить приложение и заново применить настройку — та же команда, что при
-установке:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash
-```
-
-Сменить ключ CPA (например, если выдали новый), не трогая само приложение.
-Скрипт не будет искать старый ключ и сразу попросит ввести новый:
-
-```bash
+# ввести новый ключ
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --configure-only --ask-key
 ```
 
-Если сохранённый ключ перестал работать, обычная команда установки тоже
-сама попросит ввести новый.
-
-Обычно запускать обновление вручную не нужно: Claude Desktop обновляется
-сам. Скрипт никогда не ставит более старую версию поверх новой.
-
-<details>
-<summary>Все параметры команды</summary>
-
-| Параметр | Что делает |
-|---|---|
-| `--check` | Только проверить состояние, ничего не менять |
-| `--dry-run` | Показать, что было бы сделано, ничего не меняя |
-| `--configure-only` | Только перенастроить, не устанавливать и не обновлять приложение |
-| `--no-update` | Не обновлять приложение, если оно уже стоит |
-| `--no-restart` | Записать настройку, но не запускать Claude |
-| `--with-chat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
-| `--with-main-models` | Добавить основные модели CPA (включено по умолчанию) |
-| `--claude-only` | Только три базовые модели Claude, без DeepSeek, GPT и Gemini |
-| `--list-models` | Показать модели Claude, доступные вашему ключу CPA |
-| `--add-model SPEC` | Добавить модель в список Claude: `ID`, `ID=Подпись` или `ID=Подпись=Claude-модель` |
-| `--remove-model ID` | Убрать модель, добавленную через `--add-model` |
-| `--yes` | Не задавать вопросов, если ключ уже найден |
-| `--ask-key` | Не искать сохранённый ключ, а сразу спросить новый |
-| `--force` | Записать настройку, даже если проверка ключа не прошла |
-| `--base-url URL` | Другой адрес CPA (по умолчанию `https://cpa.2brain.pro`) |
-| `--dmg-url URL` | Установить приложение из своего файла DMG или ZIP. Файл всё равно должен пройти проверку подлинности |
-| `--key KEY` | Передать ключ в команде. Не рекомендуется: ключ останется в истории Терминала |
-| `--help` | Показать справку |
-
-</details>
-
-## Другие модели
-
-Три базовые модели — **Claude Sonnet 5.5**, **Claude Opus 5.5** и
-**Claude Haiku 5.5** — остаются в списке всегда. Если ваш ключ CPA открывает
-другие модели Claude, их можно добавить вручную. Основные модели CPA
-(DeepSeek, GPT, Gemini) установщик добавляет по умолчанию, если для них
-настроены alias и доступ ключа.
-
-Посмотреть, что доступно вашему ключу:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --list-models
-```
-
-Добавить модель (подпись после `=` необязательна):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --add-model 'claude-opus-4-8=Opus 4.8' --configure-only
-```
-
-Можно добавить несколько моделей сразу:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
-  --add-model 'claude-sonnet-5=Sonnet 5' \
-  --add-model 'claude-fable-5-2=Fable 5.2' \
-  --configure-only
-```
-
-Если модель не от Anthropic, под исходным именем её добавить нельзя: Claude
-Desktop принимает только ID, похожие на Anthropic, и отбрасывает `deepseek-*`,
-`gpt-*`, `gemini-*` и подобные. Администратор CPA публикует такую модель под
-alias с `claude-` или названием семейства (`sonnet`, `haiku`) в имени —
-например, `sonnet-4-5-cpa`. После этого добавьте alias. Третий элемент
-задаёт `behavesAs` — лимиты и уровни effort:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
-  --add-model 'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' \
-  --add-model 'haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5' \
-  --configure-only
-```
-
-Пример маршрута в CPA (`cpa-key-policy`):
-
-```yaml
-aliases:
-  - alias: sonnet-4-5-cpa
-    targets:
-      - provider: opencode-go
-        target_model: opencode-go/deepseek-v4-pro
-```
-
-Alias нужно добавить и в список моделей вашего ключа CPA, иначе запрос
-получит `401 Invalid API key`.
-
-Третий элемент попадает в поле `behavesAs`: приложение будет знать, что это
-за модель, какие у неё лимиты и какие уровни effort показывать.
-
-Убрать добавленную модель:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --remove-model claude-opus-4-8 --configure-only
-```
-
-Что важно знать:
-
-- Три базовые модели остаются в списке всегда. Первая модель списка
-  считается моделью по умолчанию — это Sonnet 5.5.
-- Добавленные модели сохраняются в
-  `~/.config/claude-desktop-cpa/models.json`. Обычный запуск установщика их
-  не удаляет.
-- После изменения списка Claude нужно перезапустить. Установщик делает это
-  сам, если не указан `--no-restart`.
-- Модели не-Claude (`gpt-*`, `gemini-*`, `deepseek-*` и другие) добавляются
-  только через alias, опубликованный в CPA. Установщик откажется записывать
-  такой ID напрямую: Claude Desktop всё равно выбросит его из списка.
-- Даже с alias поведение не-Claude модели зависит от CPA и может отличаться
-  от Claude: приложение ожидает Claude-специфичные возможности. Для
-  повседневной работы надёжнее модели Claude.
-
-## Основные модели CPA
-
-Это короткий набор моделей, который установщик добавляет **по умолчанию**.
-Если серверные alias не настроены или у ключа нет к ним доступа, установщик
-пропустит их и оставит только Claude-модели.
-
-| Подпись в Claude | Alias | Модель в CPA |
-|---|---|---|
-| DeepSeek V4 Pro | `sonnet-4-5-cpa` | `opencode-go/deepseek-v4-pro` |
-| DeepSeek V4.1 Flash | `haiku-4-5-cpa` | `opencode-go/deepseek-v4.1-flash` |
-| GPT 6.2 Astra | `opus-6-2-astra-cpa` | `gpt-6.2-astra` |
-| GPT 6.2 Sol | `sonnet-6-2-sol-cpa` | `gpt-6.2-sol` |
-| GPT-6 Luna | `haiku-6-luna-cpa` | `gpt-6-luna` |
-| Gemini 4 Argon | `sonnet-4-argon-cpa` | `opencode-go/gemini-4-argon` |
-
-### Один раз на сервере
-
-Alias создаются **не у каждого пользователя**, а один раз в CPA. Есть два
-уровня:
-
-1. **Глобальный alias** — имя, которое видит клиент, и маршрут к модели CPA.
-2. **Доступ ключа** — alias нужно добавить в список моделей конкретного
-   ключа CPA.
-
-Скрипт `scripts/sync-cpa-main-models.py` делает оба шага через management
-API CPA. По умолчанию он только показывает план:
-
-```bash
-python3 scripts/sync-cpa-main-models.py --all-keys
-```
-
-Применить изменения для всех существующих ключей:
-
-```bash
-python3 scripts/sync-cpa-main-models.py --all-keys --apply
-```
-
-Скрипт попросит management key скрытым вводом. Его также можно передать
-через `CPA_MANAGEMENT_KEY` или `--management-key-file`. Management key — это
-административный секрет: не вставляйте его в историю shell и не передавайте
-пользователям.
-
-Перед изменениями скрипт сохраняет снимок политики в
-`cpa-policy-backup-<дата>.json` (права `600`). После применения он читает
-политику заново и проверяет, что alias и доступы появились.
-
-Если позже вы создадите новый ключ CPA, повторите команду с `--all-keys` —
-она добавит ему те же модели.
-
-### На каждом Mac
-
-Пользователю management key не нужен. Установщик по умолчанию проверяет,
-какие из основных alias доступны его ключу, и добавляет только их:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash
-```
-
-Или из клонированного репозитория:
-
-```bash
-./install.sh
-```
-
-Если нужны только три базовые модели Claude:
-
-```bash
-./install.sh --claude-only
-```
-
-Модели, к которым у ключа нет доступа, пропускаются с предупреждением.
-Повторный запуск уже добавленные модели не удаляет; `--claude-only` тоже не
-удаляет их, а только не добавляет новые. Для удаления используйте
-`--remove-model`.
+Обновить приложение вручную обычно не нужно: Claude обновляется сам. Чтобы
+заново применить настройку, запустите команду установки ещё раз.
 
 ## Как вернуть всё обратно
 
-Перед каждой настройкой скрипт сохраняет прежние файлы в папку
+Закройте Claude и удалите папку `configLibrary`. Так советует Anthropic: в ней
+только настройка подключения. Историю разговоров это не затронет.
 
-```text
-~/Library/Application Support/Claude-3p/.cpa-backups/
-```
-
-Там хранятся пять последних копий, каждая в папке с датой и временем.
-Чтобы вернуть прежнюю настройку, закройте Claude и скопируйте файлы из
-нужной копии обратно: `_meta.json` и файлы профиля — в папку
-`Claude-3p/configLibrary/`, `claude_desktop_config.json` — в папку
-`Claude-3p/`.
-
-Чтобы полностью убрать настройку CPA, закройте Claude и удалите папку
-`~/Library/Application Support/Claude-3p`. Обычный профиль Claude для
-аккаунта claude.ai (`~/Library/Application Support/Claude`) скрипт не
-трогает. Само приложение удаляется как обычно: перетащите **Claude** из
-папки «Программы» в Корзину.
+| | Windows | macOS |
+|---|---|---|
+| Папка `configLibrary` | `%LOCALAPPDATA%\Claude-3p\configLibrary` | `~/Library/Application Support/Claude-3p/configLibrary` |
+| Резервные копии | `%LOCALAPPDATA%\Claude-3p\.cpa-backups` | `~/Library/Application Support/Claude-3p/.cpa-backups` |
+| Удалить приложение | «Параметры → Приложения → Claude» | перетащить Claude из «Программ» в Корзину |
 
 > [!WARNING]
-> В резервных копиях могут быть старые ключи CPA. Не пересылайте эти
-> файлы и не выкладывайте их в общий доступ.
+> В резервных копиях могут быть старые ключи. Никому их не пересылайте.
 
-## Безопасность и ваши данные
+## Безопасность
 
-**Что скрипт читает, чтобы найти ключ** (по порядку):
+- Ключ идёт только на адрес CPA и только для проверки. Скрипт не печатает его и
+  не передаёт в аргументах команд.
+- Скрипт берёт ключ из настроек Claude Code и Codex, только если там указан
+  адрес этого же CPA. Ключи Anthropic, OpenAI и других сервисов не
+  используются.
+- Код вкладки Code может ходить по любым адресам в интернете
+  (`coworkEgressAllowedHosts: ["*"]`), иначе не работает, например, установка
+  пакетов. Строгий список можно задать в профиле вручную.
+- Хотите сначала прочитать скрипт? Скачайте `install.ps1` или `install.sh` из
+  этого репозитория, откройте его и запустите сами.
+- О найденных уязвимостях сообщайте по правилам из [SECURITY.md](SECURITY.md),
+  а не в открытых обращениях.
 
-1. ключ, переданный в команде (`--key` или переменная `CPA_API_KEY`);
-2. текущую настройку CPA в Claude Desktop — только если она указывает на
-   тот же адрес CPA;
-3. настройки Claude Code (`~/.claude/settings.json`) — только если там
-   указан адрес CPA (`ANTHROPIC_BASE_URL`);
-4. настройки Codex (`~/.codex/config.toml`) — только из раздела, где указан
-   адрес CPA;
-5. если ничего не нашлось, просит ввести ключ.
-
-Ключи для других сервисов, например прямые ключи Anthropic или OpenAI,
-скрипт **не берёт и никуда не отправляет**.
-
-**Куда уходит ключ.** Только на адрес CPA, и только чтобы проверить, что он
-работает. Скрипт не печатает ключ на экран и не передаёт его в аргументах
-команд.
-
-**Что меняется на компьютере.**
-
-- В папке «Программы» появляется или обновляется **Claude.app**. Перед
-  установкой скрипт проверяет контрольную сумму файла, подпись Anthropic и
-  проверку (нотаризацию) Apple. Только после этого он снимает
-  предупреждение macOS о первом запуске программы из интернета.
-- В папке `~/Library/Application Support/Claude-3p/` записывается профиль
-  CPA. Доступ к этим файлам есть только у вашей учётной записи.
-- Пароль администратора нужен только для записи в папку «Программы».
-
-**Доступ в интернет из вкладки Code.** Скрипт разрешает коду, который
-запускает Claude во вкладке Code, обращаться к любым адресам в интернете
-(`coworkEgressAllowedHosts: ["*"]`). Без этого многие задачи, например
-установка пакетов, не работают. Если в вашей организации нужен строгий
-список разрешённых адресов, его можно задать в профиле CPA вручную.
-
-**Хотите сначала посмотреть скрипт?** Это хорошая привычка для любых команд
-вида `curl ... | bash`. Скачайте файл, откройте его и запустите, когда
-убедитесь, что всё в порядке:
-
-```bash
-curl -fsSL -o install.sh https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh
-```
-
-```bash
-open -e install.sh
-```
-
-```bash
-bash install.sh
-```
-
-О найденных уязвимостях сообщайте по правилам из [SECURITY.md](SECURITY.md),
-а не в открытых обращениях.
-
-## Подробности для специалистов
+## Для администраторов
 
 <details>
-<summary>Как устроена установка и настройка</summary>
+<summary>Модели, параметры, устройство</summary>
 
-**Установка и обновление приложения**
+**Основные модели CPA.** Alias создаются один раз на сервере скриптом
+`scripts/sync-cpa-main-models.py` (нужен management key); пользователю он не
+нужен. Установщик добавляет только те alias, которые доступны ключу.
 
-- Источник — официальный Homebrew cask API
-  `https://formulae.brew.sh/api/cask/claude.json` (универсальная сборка ZIP).
-  `brew` при этом не нужен и не используется.
-- Проверки: SHA256 архива из cask, bundle id `com.anthropic.claudefordesktop`,
-  `codesign --verify --deep --strict`, Team ID `Q6L2SF6YDW` (Anthropic PBC),
-  `spctl --assess` с результатом `Notarized Developer ID`. Скачанная копия
-  проверяется до замены установленной, а установленная копия — ещё раз
-  после копирования; при ошибке возвращается прежняя версия.
-- Если установленная версия новее, чем в cask (обычно так и бывает, потому
-  что приложение обновляется само), скрипт ничего не откатывает.
-- Страница загрузки claude.com не используется: на момент написания она
-  отдавала другой продукт.
+```bash
+python3 scripts/sync-cpa-main-models.py --all-keys           # показать план
+python3 scripts/sync-cpa-main-models.py --all-keys --apply   # применить
+```
 
-**Профиль third-party inference (3P)**
+| Подпись в Claude | Alias |
+|---|---|
+| DeepSeek V4 Pro | `sonnet-4-5-cpa` |
+| DeepSeek V4.1 Flash | `haiku-4-5-cpa` |
+| GPT 6.2 Astra | `opus-6-2-astra-cpa` |
+| GPT 6.2 Sol | `sonnet-6-2-sol-cpa` |
+| GPT-6 Luna | `haiku-6-luna-cpa` |
+| Gemini 4 Argon | `sonnet-4-argon-cpa` |
 
-Claude Desktop умеет работать через сторонний шлюз (режим «3P») и хранит
-эти данные отдельно от обычного профиля:
+**Свои модели.** Claude Desktop отбрасывает имена с `deepseek`, `gpt`,
+`gemini` и другими чужими названиями, поэтому такую модель публикуют в CPA под
+alias с `claude-` или `sonnet`/`haiku` в имени. Формат: `ID`, `ID=Подпись` или
+`ID=Подпись=Claude-модель` (третий элемент задаёт лимиты и уровни effort).
+Модели хранятся в `models.json` (Windows: `%LOCALAPPDATA%\claude-desktop-cpa`,
+Mac: `~/.config/claude-desktop-cpa`), ключей в файле нет. Три базовые модели
+всегда первые.
 
-- `~/Library/Application Support/Claude-3p/configLibrary/<uuid>.json` — профиль;
-- `~/Library/Application Support/Claude-3p/configLibrary/_meta.json` — выбор
-  активного профиля (`appliedId`);
-- `~/Library/Application Support/Claude-3p/claude_desktop_config.json` —
-  `deploymentMode: "3p"`.
+```powershell
+# Windows: посмотреть, добавить, убрать
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -ListModels
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -AddModel 'claude-opus-4-8=Opus 4.8' -ConfigureOnly
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -RemoveModel claude-opus-4-8 -ConfigureOnly
+```
 
-В профиль записываются шлюз `https://cpa.2brain.pro`, схема авторизации
-`x-api-key`, модели `claude-sonnet-5-5`, `claude-opus-5-5`,
-`claude-haiku-5-5`, а также `chatTabEnabled` и `coworkEgressAllowedHosts`.
-Права на файлы — `600`, на каталоги — `700`.
+```bash
+# macOS: посмотреть, добавить, убрать
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --list-models
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --add-model 'claude-opus-4-8=Opus 4.8' --configure-only
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --remove-model claude-opus-4-8 --configure-only
+```
 
-Список моделей можно расширить. `--add-model` сохраняет выбранные модели в
-`~/.config/claude-desktop-cpa/models.json` и добавляет их в
-`inferenceModels` после трёх базовых. Поддерживаются поля Claude Desktop:
-`labelOverride`, `supports1m`, `prefer1m`, `anthropicFamilyTier`,
-`isFamilyDefault`, `behavesAs`, `maxEffort`. Первая модель списка — модель
-по умолчанию.
+`--claude-only` / `-ClaudeOnly` не удаляет ранее добавленные модели, а только
+не добавляет новые.
 
-Claude Desktop принимает в `inferenceModels` только ID, похожие на Anthropic,
-и отбрасывает имена с `deepseek`, `gpt`, `gemini` и другими чужими
-названиями. Поэтому не-Claude модель сначала публикуют в CPA под alias с
-`claude-` или названием семейства в имени, например `sonnet-4-5-cpa`, а в
-профиль добавляют уже этот alias.
+**Параметры.**
 
-После первого запуска приложение переносит ключ в связку ключей macOS
-(Keychain) и оставляет в профиле только ссылку на него. В этом случае
-`--check` покажет `key_kind: keychain`.
+| Mac | Windows | Что делает |
+|---|---|---|
+| `--check` | `-Check` | Проверить состояние, ничего не меняя |
+| `--dry-run` | `-DryRun` | Показать план, ничего не меняя |
+| `--configure-only` | `-ConfigureOnly` | Только настройка, без установки приложения |
+| `--no-update` | `-NoUpdate` | Не обновлять приложение |
+| `--no-restart` | `-NoRestart` | Не запускать Claude |
+| `--with-chat` | `-WithChat` | Показать вкладку Chat |
+| `--ask-key` | `-AskKey` | Не искать сохранённый ключ, спросить новый |
+| `--yes` | `-Yes` | Не задавать вопросов |
+| `--force` | `-Force` | Записать настройку, даже если ключ не прошёл проверку |
+| `--base-url URL` | `-BaseUrl URL` | Другой адрес CPA |
+| `--dmg-url URL` | — | Свой файл DMG или ZIP (проверка подлинности остаётся) |
+| — | `-VerifyDownload` | Только скачать и проверить установщик |
+| `--key KEY` | `-Key KEY` | Ключ в команде (не рекомендуется: останется в истории) |
+| `--with-main-models`, `--claude-only` | `-WithMainModels`, `-ClaudeOnly` | Основные модели вкл./выкл. |
+| `--list-models`, `--add-model`, `--remove-model` | `-ListModels`, `-AddModel`, `-RemoveModel` | Управление списком моделей |
 
-**Проверка ключа**
+**Устройство.** Настройка пишется в профиль режима third-party inference
+(3P): `configLibrary\<uuid>.json`, `configLibrary\_meta.json` и
+`claude_desktop_config.json` (`deploymentMode: "3p"`) в папке `Claude-3p`. Ключ
+проверяется запросами `GET /v1/models` и `POST /v1/messages` к
+`claude-haiku-5-5`.
 
-`GET /v1/models` и пробный `POST /v1/messages` к `claude-haiku-5-5`
-(`max_tokens: 8`). Ошибки `429` и `5xx` считаются временными.
-
-**Чего скрипт не делает**
-
-Не настраивает Claude Code CLI и не меняет обычный профиль
-`~/Library/Application Support/Claude` (аккаунт claude.ai).
+- **Mac:** источник — Homebrew cask API `formulae.brew.sh/api/cask/claude.json`.
+  Проверки: SHA256, bundle id, `codesign`, Team ID `Q6L2SF6YDW`, `spctl`
+  (`Notarized Developer ID`). Права файлов `600`, каталогов `700`.
+- **Windows:** источник — пакет MSIX с `downloads.claude.ai`; адрес и SHA256 из
+  манифеста winget. Проверки: SHA256, имя пакета и идентификатор издателя
+  `pzs8sxrjxfjjc`, подпись Authenticode (`Valid`, Anthropic), затем сама
+  Windows при установке. Ставится на пользователя, права администратора не
+  нужны. Старая установка `.exe` не трогается. Папка настроек —
+  `%LOCALAPPDATA%\Claude-3p`; на Windows 10 с MSIX может быть в
+  `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p`.
+- **Кодировка:** `install.ps1` сохранён в UTF-8 без BOM, чтобы работал
+  `irm | iex`. Скачанную копию запускайте так:
+  `& ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 .\install.ps1)))`.
 
 </details>
 
-### Разработка
+## Для разработчиков
 
 ```bash
-bash -n install.sh
+bash tests/test-script.sh   # Mac и Linux (включая тесты моделей)
+shellcheck -x install.sh tests/*.sh
 ```
 
-```bash
-shellcheck -x install.sh tests/test-script.sh tests/test-models.sh
+```powershell
+./tests/test-windows.ps1   # Windows PowerShell 5.1 или PowerShell 7
 ```
 
-```bash
-bash tests/test-script.sh
-```
+CI запускает ShellCheck, PSScriptAnalyzer, тесты и пробный запуск на macOS и
+Windows. Проверка `windows-e2e` проходит весь путь пользователя на настоящем
+сервере Windows без настоящего ключа: скачивает пакет Claude, проверяет и
+устанавливает его, подключает к поддельному CPA на `127.0.0.1`, запускает
+приложение, запускает установщик второй раз и сохраняет снимок экрана (в
+артефактах запуска). Тесты работают во временной домашней папке и не читают
+ваши настройки.
 
-```bash
-python3 -m py_compile scripts/sync-cpa-main-models.py
-```
+## Помощь
 
-CI проверяет синтаксис, ShellCheck, справку, правила поиска ключей,
-синтаксис Python-скрипта и `--dry-run` на macOS. Тесты используют временную
-домашнюю папку и не читают настоящие настройки разработчика.
-
-## Помощь и обратная связь
-
-- Нашли ошибку или что-то непонятно — [создайте обращение (issue)](https://github.com/yshishenya/claude-desktop-cpa-onboarding/issues/new/choose).
-- Уязвимость или утечка ключа — по правилам из [SECURITY.md](SECURITY.md).
-- Никогда не вставляйте ключ CPA в обращения и комментарии.
+[Создайте обращение](https://github.com/yshishenya/claude-desktop-cpa-onboarding/issues/new/choose)
+и приложите результат проверки. **Никогда не вставляйте ключ CPA** в обращения
+и комментарии.
 
 ## Лицензия
 
-[MIT](LICENSE).
+[MIT](LICENSE)

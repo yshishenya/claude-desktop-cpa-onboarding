@@ -50,3 +50,50 @@ jobs:
           persist-credentials: false
       - name: Dry run
         run: bash install.sh --dry-run --no-restart
+
+  powershell-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Scope CurrentUser -Force
+          # install.ps1 is UTF-8 without a BOM on purpose: a BOM breaks `irm | iex`.
+          $exclude = 'PSAvoidUsingWriteHost', 'PSUseShouldProcessForStateChangingFunctions', 'PSUseBOMForUnicodeEncodedFile'
+          $results = foreach ($file in 'install.ps1', 'tests/test-windows.ps1', 'tests/e2e-assert.ps1') {
+            Invoke-ScriptAnalyzer -Path $file -Severity Warning, Error -ExcludeRule $exclude
+          }
+          $results | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
+          if ($results) { exit 1 }
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Version
+        run: $PSVersionTable | Format-Table -AutoSize | Out-String | Write-Host
+      - name: Help (as a downloaded copy is run)
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -Help
+      - name: Help (run directly, PowerShell 7 only)
+        if: matrix.shell == 'pwsh'
+        run: ./install.ps1 -Help
+      - name: Tests
+        run: ./tests/test-windows.ps1
+      - name: Dry run
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -DryRun -NoRestart
