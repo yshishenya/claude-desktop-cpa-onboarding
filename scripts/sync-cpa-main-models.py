@@ -149,6 +149,142 @@ def key_alias_names(key: dict) -> set[str]:
     }
 
 
+def save_snapshot(backup_dir: str, aliases: list, keys: list) -> str:
+    """Save the policy before a change. A name is never reused, so a snapshot is never overwritten."""
+    backup_dir = os.path.abspath(backup_dir)
+    os.makedirs(backup_dir, mode=0o700, exist_ok=True)
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = os.path.join(backup_dir, f"cpa-policy-backup-{stamp}.json")
+    counter = 1
+    while os.path.exists(path):
+        counter += 1
+        path = os.path.join(backup_dir, f"cpa-policy-backup-{stamp}-{counter}.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"aliases": aliases, "keys": keys}, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    os.chmod(path, 0o600)
+    return path
+
+
+def revoke(args, token: str, api_base: str) -> int:
+    """Take old aliases away from the named keys. Global aliases are not touched."""
+    managed = {item["alias"] for item in MODELS}
+    asked = list(dict.fromkeys(args.revoke_alias))
+    protected = [name for name in asked if name in managed]
+    if protected:
+        sys.exit("Эти alias входят в управляемый набор, отзывать их нельзя: " + ", ".join(protected))
+    if not args.key_name or args.all_keys:
+        sys.exit("Для --revoke-alias укажите ключи через --key-name (--all-keys не допускается).")
+
+    aliases = alias_list(api("GET", api_base + "/aliases", token))
+    keys = key_list(api("GET", api_base + "/keys", token))
+    wanted = set(args.key_name)
+    targets = [key for key in keys if key.get("name") in wanted]
+    for name in sorted(wanted - {key.get("name") for key in targets}):
+        print(f"  ! ключ не найден: {name}")
+
+    print("== План (отзыв) ==")
+    updates = []
+    for key in targets:
+        in_models = {m["alias"] for m in (key.get("models") or []) if isinstance(m, dict)}
+        present = [name for name in asked if name in in_models or name in key_alias_names(key)]
+        if not present:
+            print(f"  = ключ {key.get('name')}: этих alias нет")
+            continue
+        for name in present:
+            routes = len(key_model_entries(key, name))
+            print(f"  - ключ {key.get('name')}: убрать {name} ({routes} маршрут(ов))")
+        updates.append((key, present))
+    global_names = {item["alias"] for item in aliases}
+    for name in asked:
+        if name not in global_names:
+            print(f"  ! {name}: такого глобального alias нет")
+
+    if not args.apply:
+        print("\nПроверка завершена. Для применения добавьте --apply.")
+        return 0
+    if not updates:
+        print("\nМеняться нечему.")
+        return 0
+
+    backup_path = save_snapshot(args.backup_dir, aliases, keys)
+    print(f"\nСнимок политики: {backup_path}")
+
+    for key, present in updates:
+        drop = set(present)
+        models = [m for m in (key.get("models") or []) if not (isinstance(m, dict) and m.get("alias") in drop)]
+        aliases_field = [
+            item for item in (key.get("aliases") or [])
+            if (item.get("alias") if isinstance(item, dict) else item) not in drop
+        ]
+        # Both fields are sent: a PATCH that changes only one can be rolled back.
+        payload = {
+            "id": key["id"],
+            "name": key.get("name", ""),
+            "enabled": key.get("enabled", True),
+            "rpm": key.get("rpm", 0),
+            "daily_limit_usd": key.get("daily_limit_usd", 0),
+            "weekly_limit_usd": key.get("weekly_limit_usd", 0),
+            "allow_models_endpoint": key.get("allow_models_endpoint", True),
+            "models": models,
+            "aliases": aliases_field,
+        }
+        api("PATCH", api_base + "/keys", token, payload)
+        print(f"  обновлён ключ {key.get('name') or key['id']}")
+
+    keys_after = {key["id"]: key for key in key_list(api("GET", api_base + "/keys", token))}
+    aliases_after = alias_list(api("GET", api_base + "/aliases", token))
+    problems = []
+    if aliases_after != aliases:
+        problems.append("глобальные alias изменились")
+    touched = {key["id"] for key, _ in updates}
+    for key in keys:
+        after = keys_after.get(key["id"], {})
+        if key["id"] not in touched:
+            if {f: v for f, v in after.items() if f not in ("updated_at", "usage")} != {
+                f: v for f, v in key.items() if f not in ("updated_at", "usage")
+            }:
+                problems.append(f"изменился ключ, который не выбирали: {key.get('name')}")
+    def complete(item: dict) -> dict:
+        """Every field except the ones that change on their own; lists are never None."""
+        out = {f: v for f, v in item.items() if f not in ("updated_at", "usage")}
+        out["models"] = list(out.get("models") or [])
+        out["aliases"] = list(out.get("aliases") or [])
+        return out
+
+    for key, present in updates:
+        after = keys_after.get(key["id"], {})
+        label = key.get("name") or key["id"]
+        drop = set(present)
+        left_models = {m["alias"] for m in (after.get("models") or [])}
+        left_aliases = key_alias_names(after)
+        for name in present:
+            if name in left_models or name in left_aliases:
+                problems.append(f"{label}: {name} всё ещё есть")
+        # The key must be exactly what it was, minus the revoked entries: every
+        # route of every kept alias (provider, target, billing), the limits and
+        # the other fields.
+        expected = complete(key)
+        expected["models"] = [
+            m for m in expected["models"] if not (isinstance(m, dict) and m.get("alias") in drop)
+        ]
+        expected["aliases"] = [
+            item for item in expected["aliases"]
+            if (item.get("alias") if isinstance(item, dict) else item) not in drop
+        ]
+        if complete(after) != expected:
+            problems.append(
+                f"{label}: изменилось что-то кроме отозванных alias (маршруты, лимиты или другие поля)"
+            )
+    if problems:
+        print("\nПроверка не прошла:")
+        for problem in problems:
+            print("  ! " + problem)
+        return 1
+    print("\nГотово. Проверка прошла.")
+    return 0
+
+
 def build_route(source: dict) -> dict:
     route = {
         "alias": source["alias"],
@@ -189,6 +325,15 @@ def main() -> int:
         help="Выдать alias всем существующим ключам CPA.",
     )
     parser.add_argument(
+        "--revoke-alias",
+        action="append",
+        default=[],
+        help=(
+            "Забрать этот alias у ключей из --key-name (режим отзыва: ничего не "
+            "выдаётся, глобальные alias не удаляются). Можно повторять."
+        ),
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="Применить изменения. Без флага выполняется только проверка.",
@@ -206,6 +351,9 @@ def main() -> int:
     base = args.url.rstrip("/")
     token = management_token(args.management_key_file)
     api_base = base + API_PREFIX
+
+    if args.revoke_alias:
+        return revoke(args, token, api_base)
 
     aliases = alias_list(api("GET", api_base + "/aliases", token))
     keys = key_list(api("GET", api_base + "/keys", token))
@@ -266,14 +414,7 @@ def main() -> int:
         print("\nПроверка завершена. Для применения добавьте --apply.")
         return 0
 
-    backup_dir = os.path.abspath(args.backup_dir)
-    os.makedirs(backup_dir, mode=0o700, exist_ok=True)
-    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = os.path.join(backup_dir, f"cpa-policy-backup-{stamp}.json")
-    with open(backup_path, "w", encoding="utf-8") as handle:
-        json.dump({"aliases": aliases, "keys": keys}, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-    os.chmod(backup_path, 0o600)
+    backup_path = save_snapshot(args.backup_dir, aliases, keys)
     print(f"\nСнимок политики: {backup_path}")
 
     for model, source in missing_routes:

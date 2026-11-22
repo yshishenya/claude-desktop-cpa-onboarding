@@ -51,6 +51,16 @@ MAIN_MODEL_SPECS=(
   'haiku-luna-6-claude-code=GPT-6 Luna=claude-haiku-5-5'
 )
 
+# Old default aliases that were deleted from the CPA server. An installer that
+# ran earlier may have saved them in models.json; every run removes them, so
+# Claude Desktop does not list models that now answer 401.
+LEGACY_ALIASES=(
+  'opus-6-2-astra-cpa'
+  'sonnet-6-2-sol-cpa'
+  'haiku-6-luna-cpa'
+  'sonnet-4-argon-cpa'
+)
+
 BASE_URL="${DEFAULT_BASE_URL}"
 KEY=""
 DMG_URL=""
@@ -225,6 +235,16 @@ with open(tmp, "w", encoding="utf-8") as f:
 os.chmod(tmp, 0o600)
 os.replace(tmp, path)
 PY
+}
+
+# Drops the legacy aliases from models.json (quiet when there is nothing to drop).
+prune_legacy_models() {
+  [[ -f "$MODELS_FILE" ]] || return 0
+  local out
+  out="$(update_models_file remove "${LEGACY_ALIASES[@]}")" || return 0
+  if [[ "$out" != *"удалено моделей: 0"* ]]; then
+    log "Убрал устаревшие alias, которых больше нет на сервере CPA."
+  fi
 }
 
 # Comma-separated names of models added through --add-model, for logs.
@@ -1506,6 +1526,7 @@ main() {
   if [[ "$DO_CONFIGURE" -eq 1 ]]; then
     resolve_key
     KEY_SOURCE="${KEY_SOURCE:-unknown}"
+    prune_legacy_models
     if [[ "$WITH_MAIN_MODELS" -eq 1 ]]; then
       apply_main_models
     fi
