@@ -1,0 +1,60 @@
+name: Что-то не работает
+description: Ошибка при установке, настройке или работе через CPA
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что сообщили о проблеме.
+        **Никогда не вставляйте сюда ключ CPA.** Результат `--check` показывает
+        только короткий отпечаток ключа — его можно приложить без опаски.
+        Если проблема касается безопасности, используйте правила из SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что произошло
+      description: Что вы делали и что увидели. Можно своими словами.
+      placeholder: Запустил команду установки, после ввода ключа появилась ошибка...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что вы ожидали
+    validations:
+      required: false
+  - type: input
+    id: macos
+    attributes:
+      label: Версия macOS
+      description: Меню Apple → «Об этом Mac».
+      placeholder: macOS 15.1
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Процессор
+      options:
+        - Apple (M1, M2, M3 и новее)
+        - Intel
+        - Не знаю
+    validations:
+      required: true
+  - type: textarea
+    id: check-output
+    attributes:
+      label: Результат проверки
+      description: |
+        Выполните в Терминале и вставьте результат:
+        `curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --check`
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: no-secrets
+    attributes:
+      label: Проверка
+      options:
+        - label: В обращении нет ключа CPA и других секретов.
+          required: true

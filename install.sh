@@ -17,12 +17,18 @@
 #   The artifact version is compared with the installed app before replacing.
 # - The CPA key is only written to a 0600 profile file and a 0600 temporary file;
 #   it is never printed and never placed in argv.
+# - Keys found in Claude Code / Codex settings are reused only when those
+#   settings already point at the same CPA host. Unrelated keys (for example a
+#   direct Anthropic or OpenAI key) are never sent to CPA.
+# - The installed app must be signed by Anthropic (Team ID below) and
+#   notarized by Apple before the quarantine attribute is removed.
 
 set -Eeuo pipefail
 umask 077
 
 readonly APP_PATH="/Applications/Claude.app"
 readonly APP_BUNDLE_ID="com.anthropic.claudefordesktop"
+readonly APP_TEAM_ID="Q6L2SF6YDW"
 readonly APP_NAME="Claude"
 readonly DEFAULT_BASE_URL="https://cpa.2brain.pro"
 readonly SUPPORT_DIR="${HOME}/Library/Application Support/Claude-3p"
@@ -80,21 +86,37 @@ new_tmp_file() {
   printf '%s\n' "$f"
 }
 
+# True when a controlling terminal can actually be opened. `curl ... | bash`
+# leaves stdin as a pipe, but /dev/tty is still usable for prompts and sudo.
+have_tty() {
+  [[ -t 0 ]] && return 0
+  { : </dev/tty; } 2>/dev/null
+}
+
 read_secret() {
   local prompt="$1" var="$2"
   if [[ -t 0 ]]; then
     printf '%s' "$prompt" >&2
-    IFS= read -r -s "$var"
+    IFS= read -r -s "${var?}"
     printf '\n' >&2
     return 0
   fi
-  if [[ -r /dev/tty ]]; then
+  if have_tty; then
     printf '%s' "$prompt" > /dev/tty
-    IFS= read -r -s "$var" < /dev/tty
+    IFS= read -r -s "${var?}" < /dev/tty
     printf '\n' > /dev/tty
     return 0
   fi
   return 1
+}
+
+# Prints the lowercase host of a URL (no scheme, port, path or credentials).
+url_host() {
+  local u="${1#*://}"
+  u="${u%%/*}"
+  u="${u##*@}"
+  u="${u%%:*}"
+  printf '%s\n' "$u" | tr '[:upper:]' '[:lower:]'
 }
 
 usage() {
@@ -111,21 +133,30 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   --no-update          Не обновлять приложение.
   --no-restart         Записать конфиг, но не запускать Claude.
   --with-chat          Показать вкладку Chat (ей нужен вход в claude.ai).
-  --key KEY            CPA API-ключ. Лучше передать через CPA_API_KEY,
-                       чтобы ключ не остался в истории shell.
+  --key KEY            CPA API-ключ. Ключ, набранный в команде, остаётся
+                       в истории терминала; безопаснее ввести его по запросу.
   --base-url URL       Адрес CPA (по умолчанию https://cpa.2brain.pro).
   --dmg-url URL        Свой URL DMG или ZIP для установки/обновления.
+                       Приложение всё равно должно быть подписано Anthropic
+                       и заверено Apple.
   --force              Записать конфиг даже если проверка Claude не прошла.
   --yes                Не задавать вопросов (если ключ уже найден).
   --help               Эта справка.
 
+Запуск с опциями без скачивания репозитория:
+  curl -fsSL <адрес install.sh> | bash -s -- --check
+
 Ключ ищется в таком порядке:
   1. --key
   2. CPA_API_KEY
-  3. текущий профиль CPA в Claude-3p
-  4. ~/.claude/settings.json (ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY)
-  5. ~/.codex/config.toml (experimental_bearer_token / X-Api-Key)
-  6. интерактивный ввод
+  3. текущий профиль Claude-3p, если он смотрит на тот же адрес CPA
+  4. ~/.claude/settings.json (ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY),
+     только если ANTHROPIC_BASE_URL указывает на тот же адрес CPA
+  5. ~/.codex/config.toml, только из раздела провайдера, у которого
+     base_url указывает на тот же адрес CPA
+  6. ввод по запросу
+Ключи для других сервисов (например, прямые ключи Anthropic или OpenAI)
+не используются и никуда не отправляются.
 
 Что настраивается:
   - ~/Library/Application Support/Claude-3p/configLibrary/<uuid>.json
@@ -275,13 +306,34 @@ print(d.get("sha256") or "")
 
 run_root() {
   if [[ "${USE_SUDO:-0}" -eq 1 ]]; then
-    if [[ ! -t 0 ]]; then
-      die "Для изменения /Applications нужен sudo, но нет TTY. Запусти скрипт в терминале."
-    fi
-    sudo "$@"
+    have_tty || die "Для изменения /Applications нужен пароль администратора, но терминал недоступен. Запусти скрипт в приложении «Терминал»."
+    # stdin comes from /dev/tty so nothing can eat the script when it is
+    # piped through `curl ... | bash`; sudo asks for the password on the tty.
+    # shellcheck disable=SC2024 # the redirect is sudo's stdin on purpose
+    sudo "$@" </dev/tty
   else
     "$@"
   fi
+}
+
+# Succeeds only for a Claude.app signed by Anthropic and notarized by Apple.
+verify_app_trust() {
+  local app="$1" team assess
+  if ! codesign --verify --deep --strict "$app" >/dev/null 2>&1; then
+    warn "Подпись приложения повреждена или отсутствует."
+    return 1
+  fi
+  team="$(codesign -dv --verbose=2 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p' | head -1)"
+  if [[ "$team" != "$APP_TEAM_ID" ]]; then
+    warn "Приложение подписано не Anthropic (Team ID: ${team:-нет}, ожидается $APP_TEAM_ID)."
+    return 1
+  fi
+  assess="$(spctl --assess --type execute -vv "$app" 2>&1 || true)"
+  if ! grep -q 'source=Notarized Developer ID' <<<"$assess"; then
+    warn "Apple не подтвердила проверку (нотаризацию) приложения."
+    return 1
+  fi
+  return 0
 }
 
 install_app_from_src() {
@@ -310,10 +362,20 @@ install_app_from_src() {
     log "Устанавливаю Claude Desktop ${newver:-unknown}."
   fi
 
-  quit_app
+  # Check the downloaded app before touching the installed one.
+  verify_app_trust "$src" || { warn "Скачанное приложение не прошло проверку подлинности; установка отменена."; return 1; }
 
   USE_SUDO=0
   [[ -w /Applications ]] || USE_SUDO=1
+  if [[ "$USE_SUDO" -eq 1 ]]; then
+    have_tty || die "Для установки в /Applications нужен пароль администратора, но терминал недоступен."
+    log "Для установки в /Applications нужен пароль администратора Mac."
+    log "При вводе пароля символы не отображаются — это нормально."
+    # shellcheck disable=SC2024 # the redirect is sudo's stdin on purpose
+    sudo -v </dev/tty || { warn "Пароль администратора не принят."; return 1; }
+  fi
+
+  quit_app
 
   local ts old
   ts="$(date +%Y%m%d-%H%M%S)"
@@ -329,14 +391,15 @@ install_app_from_src() {
     return 1
   fi
 
-  if ! codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1; then
-    warn "Подпись установленного приложения не прошла проверку; откатываю."
+  if ! verify_app_trust "$APP_PATH"; then
+    warn "Установленная копия не прошла проверку подлинности; откатываю."
     run_root rm -rf "$APP_PATH" 2>/dev/null || true
     if [[ -d "$old" ]]; then run_root mv "$old" "$APP_PATH" 2>/dev/null || true; fi
     return 1
   fi
 
-  # Official/notarized build: avoid the first-launch quarantine prompt.
+  # Signed by Anthropic and notarized (checked above): skip the first-launch
+  # quarantine prompt.
   run_root xattr -dr com.apple.quarantine "$APP_PATH" >/dev/null 2>&1 || true
 
   if [[ -d "$old" ]]; then
@@ -367,7 +430,7 @@ install_from_artifact() {
       MOUNT_DIR="$mnt"
       hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$artifact" >/dev/null 2>&1 \
         || { warn "Не удалось смонтировать DMG."; return 1; }
-      src="$(ls -d "$mnt"/*.app 2>/dev/null | head -1 || true)"
+      src="$(find "$mnt" -maxdepth 1 -type d -name '*.app' 2>/dev/null | head -1 || true)"
       if [[ -z "$src" ]]; then
         src="$(find "$mnt" -type d -name "Claude.app" 2>/dev/null | head -1 || true)"
       fi
@@ -467,11 +530,16 @@ install_or_update_app() {
   rm -rf "$TMP_DIR"; TMP_DIR=""
 }
 
+# All key_from_* helpers print a key only when its settings already point at
+# the CPA host ($1). Keys for other services are never returned, so they are
+# never sent to CPA for validation.
+
 # Prints the current CPA key from the applied Claude-3p profile, if present.
 key_from_profile() {
-  python3 - "$SUPPORT_DIR" <<'PY' 2>/dev/null || true
+  python3 - "$SUPPORT_DIR" "$1" <<'PY' 2>/dev/null || true
 import json, os, sys
-base = sys.argv[1]
+from urllib.parse import urlsplit
+base, want = sys.argv[1], sys.argv[2].lower()
 meta_path = os.path.join(base, "configLibrary", "_meta.json")
 try:
     meta = json.load(open(meta_path))
@@ -485,6 +553,8 @@ try:
     p = json.load(open(path))
 except Exception:
     sys.exit(0)
+if (urlsplit(p.get("inferenceGatewayBaseUrl") or "").hostname or "").lower() != want:
+    sys.exit(0)
 key = p.get("inferenceGatewayApiKey")
 # After the first launch Claude Desktop imports the gateway key into the
 # macOS Keychain and replaces the profile value with an opaque keychain
@@ -495,13 +565,19 @@ PY
 }
 
 key_from_claude_settings() {
-  python3 - "$HOME/.claude/settings.json" <<'PY' 2>/dev/null || true
+  python3 - "$HOME/.claude/settings.json" "$1" <<'PY' 2>/dev/null || true
 import json, sys
+from urllib.parse import urlsplit
+want = sys.argv[2].lower()
 try:
     d = json.load(open(sys.argv[1]))
 except Exception:
     sys.exit(0)
 env = d.get("env") or {}
+if not isinstance(env, dict):
+    sys.exit(0)
+if (urlsplit(env.get("ANTHROPIC_BASE_URL") or "").hostname or "").lower() != want:
+    sys.exit(0)
 for k in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"):
     v = env.get(k)
     if isinstance(v, str) and v.strip():
@@ -511,21 +587,44 @@ PY
 }
 
 key_from_codex() {
-  python3 - "$HOME/.codex/config.toml" <<'PY' 2>/dev/null || true
+  python3 - "$HOME/.codex/config.toml" "$1" <<'PY' 2>/dev/null || true
+# Minimal line-based reader (system python3 may be older than 3.11, so
+# tomllib is not guaranteed). A key is taken only from a provider whose
+# base_url points at the CPA host; [model_providers.X.http_headers]
+# sub-tables belong to provider X.
 import re, sys
+from urllib.parse import urlsplit
+want = sys.argv[2].lower()
 try:
-    s = open(sys.argv[1], encoding="utf-8").read()
+    lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
 except Exception:
     sys.exit(0)
-patterns = [
-    r'experimental_bearer_token\s*=\s*"([^"]+)"',
-    r'X-Api-Key"\s*=\s*"([^"]+)"',
-    r'api_key\s*=\s*"([^"]+)"',
+groups = {}
+group = ""
+key_res = [
+    re.compile(r'^\s*experimental_bearer_token\s*=\s*"([^"]+)"'),
+    re.compile(r'"?X-Api-Key"?\s*=\s*"([^"]+)"', re.I),
+    re.compile(r'^\s*api_key\s*=\s*"([^"]+)"'),
 ]
-for p in patterns:
-    m = re.search(p, s)
+for line in lines:
+    m = re.match(r'^\s*\[+\s*([^\]]+?)\s*\]+\s*$', line)
     if m:
-        print(m.group(1).strip())
+        parts = [x.strip().strip('"') for x in m.group(1).split(".")]
+        group = ".".join(parts[:2]) if parts[0] == "model_providers" else ".".join(parts)
+        continue
+    g = groups.setdefault(group, {"base": None, "keys": []})
+    b = re.match(r'^\s*base_url\s*=\s*"([^"]+)"', line)
+    if b:
+        g["base"] = b.group(1)
+        continue
+    for r in key_res:
+        k = r.search(line)
+        if k:
+            g["keys"].append(k.group(1).strip())
+            break
+for g in groups.values():
+    if g["base"] and (urlsplit(g["base"]).hostname or "").lower() == want and g["keys"]:
+        print(g["keys"][0])
         sys.exit(0)
 PY
 }
@@ -648,9 +747,11 @@ resolve_key() {
     return 0
   fi
 
-  k="$(key_from_profile)";       [[ -n "$k" ]] && add_candidate "$k" "Claude-3p profile"
-  k="$(key_from_claude_settings)"; [[ -n "$k" ]] && add_candidate "$k" "Claude CLI settings"
-  k="$(key_from_codex)";         [[ -n "$k" ]] && add_candidate "$k" "Codex config"
+  local host
+  host="$(url_host "$BASE_URL")"
+  k="$(key_from_profile "$host")";         [[ -n "$k" ]] && add_candidate "$k" "Claude-3p profile"
+  k="$(key_from_claude_settings "$host")"; [[ -n "$k" ]] && add_candidate "$k" "Claude CLI settings"
+  k="$(key_from_codex "$host")";           [[ -n "$k" ]] && add_candidate "$k" "Codex config"
 
   if [[ ${#keys[@]} -eq 0 ]]; then
     if [[ "$CHECK" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
@@ -658,9 +759,9 @@ resolve_key() {
       return 1
     fi
     [[ "$ASSUME_YES" -eq 1 ]] && die "CPA-ключ не найден, а --yes запрещает вопросы. Передай --key или CPA_API_KEY."
-    [[ -t 0 || -r /dev/tty ]] || die "CPA-ключ не найден. Передай --key или CPA_API_KEY."
-    local attempt
-    for attempt in 1 2 3; do
+    have_tty || die "CPA-ключ не найден. Передай --key или CPA_API_KEY."
+    local _
+    for _ in 1 2 3; do
       read_secret 'CPA API key: ' KEY || die "Нет TTY для ввода ключа. Передай --key или CPA_API_KEY."
       [[ -n "$KEY" ]] || continue
       if validate_key "$KEY"; then
@@ -917,12 +1018,19 @@ start_app() {
 }
 
 check_mode() {
+  local check_ok=1
   log "== Claude Desktop =="
   if app_installed; then
     log "path: $APP_PATH"
     log "version: $(app_version)"
     log "bundle: $(app_bundle_id)"
     log "running: $(app_running && echo yes || echo no)"
+    if verify_app_trust "$APP_PATH" 2>/dev/null; then
+      log "signature: Anthropic ($APP_TEAM_ID), notarized"
+    else
+      warn "Приложение не прошло проверку подлинности (подпись Anthropic / нотаризация Apple)."
+      check_ok=0
+    fi
   else
     warn "Claude Desktop не установлен."
   fi
@@ -938,7 +1046,6 @@ check_mode() {
   else
     warn "Could not load official cask metadata."
   fi
-  local check_ok=1
   app_installed || check_ok=0
 
   log
@@ -1053,4 +1160,8 @@ main() {
   log "Первый запуск Code может скачивать runtime — это не авторизация."
 }
 
-main "$@"
+# Tests source the script with CPA_INSTALL_SOURCE_ONLY=1 to reach the helpers
+# without running the installer. `curl | bash` never sets it.
+if [[ "${CPA_INSTALL_SOURCE_ONLY:-0}" != "1" ]]; then
+  main "$@"
+fi
