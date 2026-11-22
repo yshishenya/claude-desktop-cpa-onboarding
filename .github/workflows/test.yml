@@ -21,7 +21,7 @@ jobs:
         with:
           persist-credentials: false
       - name: ShellCheck
-        run: shellcheck -x install.sh tests/test-script.sh
+        run: shellcheck -x install.sh tests/test-script.sh tests/test-models.sh
 
   shell:
     strategy:
