@@ -62,8 +62,11 @@ jobs:
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Scope CurrentUser -Force
-          $results = Invoke-ScriptAnalyzer -Path install.ps1, tests/test-windows.ps1 -Severity Warning, Error `
-            -ExcludeRule PSAvoidUsingWriteHost, PSUseShouldProcessForStateChangingFunctions
+          # install.ps1 is UTF-8 without a BOM on purpose: a BOM breaks `irm | iex`.
+          $exclude = 'PSAvoidUsingWriteHost', 'PSUseShouldProcessForStateChangingFunctions', 'PSUseBOMForUnicodeEncodedFile'
+          $results = foreach ($file in 'install.ps1', 'tests/test-windows.ps1') {
+            Invoke-ScriptAnalyzer -Path $file -Severity Warning, Error -ExcludeRule $exclude
+          }
           $results | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
           if ($results) { exit 1 }
 
@@ -83,9 +86,14 @@ jobs:
           persist-credentials: false
       - name: Version
         run: $PSVersionTable | Format-Table -AutoSize | Out-String | Write-Host
-      - name: Help
+      - name: Help (as a downloaded copy is run)
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -Help
+      - name: Help (run directly, PowerShell 7 only)
+        if: matrix.shell == 'pwsh'
         run: ./install.ps1 -Help
       - name: Tests
         run: ./tests/test-windows.ps1
       - name: Dry run
-        run: ./install.ps1 -DryRun -NoRestart
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -DryRun -NoRestart

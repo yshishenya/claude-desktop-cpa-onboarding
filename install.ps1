@@ -1,4 +1,4 @@
-﻿<#
+<#
   claude-desktop-cpa (Windows)
 
   Installs or updates Claude Desktop (MSIX) on Windows and configures its
@@ -21,6 +21,11 @@
     already point at the same CPA host.
   - Works in Windows PowerShell 5.1 and PowerShell 7. Safe for `irm | iex`:
     it never calls `exit` in that case, so the user's window stays open.
+  - Encoding: this file is UTF-8 WITHOUT a BOM. `irm` decodes it correctly
+    (GitHub serves charset=utf-8), while a BOM would reach `iex` as a stray
+    character and break parsing. Windows PowerShell 5.1 reads a BOM-less
+    file in the ANSI code page, so a downloaded copy must be run as:
+      & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 .\install.ps1)))
 #>
 [CmdletBinding()]
 param(
@@ -101,6 +106,9 @@ claude-desktop-cpa — установка/обновление Claude Desktop н
 
 Запуск с параметрами без скачивания файла:
   & ([scriptblock]::Create((irm <адрес install.ps1>))) -Check
+
+Запуск скачанной копии (так PowerShell правильно прочитает русский текст):
+  & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 .\install.ps1))) -Check
 
 Параметры:
   -Check           Только проверить состояние, ничего не менять.
@@ -1046,7 +1054,9 @@ function Invoke-CpaMain {
 # helpers without running the installer. `irm | iex` never sets it.
 if ($env:CPA_INSTALL_SOURCE_ONLY -ne '1') {
     $cpaExitCode = Invoke-CpaMain
-    # Only a script file may set the exit code: under `irm | iex` an `exit`
-    # would close the user's PowerShell window.
+    # Always report the result through $LASTEXITCODE, which works for every
+    # way of starting the script. Only a script file may also call `exit`:
+    # under `irm | iex` an `exit` would close the user's PowerShell window.
+    $global:LASTEXITCODE = $cpaExitCode
     if ($PSCommandPath -and $MyInvocation.InvocationName -ne '.') { exit $cpaExitCode }
 }

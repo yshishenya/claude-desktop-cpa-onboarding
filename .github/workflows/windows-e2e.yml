@@ -32,12 +32,14 @@ jobs:
           persist-credentials: false
 
       - name: Verify the official installer
-        run: ./install.ps1 -VerifyDownload
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -VerifyDownload
 
       - name: Install and configure (fake key, no restart)
         env:
           CPA_API_KEY: ci-not-a-real-key
-        run: ./install.ps1 -NoRestart -Force
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -NoRestart -Force
 
       - name: Check the written configuration
         run: |
@@ -56,7 +58,7 @@ jobs:
 
       - name: Check mode (the fake key is expected to fail validation)
         run: |
-          ./install.ps1 -Check
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -Check
           Write-Host "exit code: $LASTEXITCODE"
           exit 0
 
@@ -65,7 +67,7 @@ jobs:
         env:
           RAW_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.pull_request.head.sha }}/install.ps1
         run: |
-          $local = & ./install.ps1 -Help 6>&1 | Out-String
+          $local = & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -Help 6>&1 | Out-String
           $remote = & ([scriptblock]::Create((Invoke-RestMethod $env:RAW_URL))) -Help 6>&1 | Out-String
           if ($local -ne $remote) { Write-Host $remote; throw 'help text differs when loaded through irm (encoding problem?)' }
           Write-Host 'irm + scriptblock: OK'

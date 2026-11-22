@@ -1,4 +1,4 @@
-﻿# Offline tests for install.ps1. Runs in Windows PowerShell 5.1 and PowerShell 7.
+# Offline tests for install.ps1. Runs in Windows PowerShell 5.1 and PowerShell 7.
 # Every helper reads USERPROFILE / LOCALAPPDATA at call time, so both point at
 # a temporary folder for the whole run: real user settings are never read.
 $ErrorActionPreference = 'Stop'
@@ -35,24 +35,26 @@ function Write-TestFile {
 }
 
 try {
-    . $installer
+    # Read as UTF-8 explicitly: Windows PowerShell 5.1 would otherwise use the
+    # ANSI code page for a file without a BOM.
+    $text = [System.IO.File]::ReadAllText($installer, [System.Text.Encoding]::UTF8)
+    . ([scriptblock]::Create($text))
 
-    # --- parsing and help --------------------------------------------------
+    # --- parsing, encoding and help --------------------------------------------
     $tokens = $null; $errors = $null
-    $null = [System.Management.Automation.Language.Parser]::ParseFile($installer, [ref]$tokens, [ref]$errors)
+    $null = [System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors)
     Assert-True 'install.ps1 parses without errors' ($errors.Count -eq 0)
     $raw = [System.IO.File]::ReadAllBytes($installer)
-    Assert-True 'install.ps1 is saved with a UTF-8 BOM (needed by PowerShell 5.1)' ($raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF)
+    Assert-True 'install.ps1 has no BOM (a BOM breaks `irm | iex`)' (-not ($raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF))
 
     $helpText = (& { Show-CpaUsage } 6>&1 | Out-String)
     foreach ($needle in @('-Check', '-DryRun', '-ConfigureOnly', '-AskKey', '-Yes', '-BaseUrl', 'CPA_API_KEY', 'irm ', 'scriptblock')) {
         Assert-True ("help mentions $needle") ($helpText.Contains($needle))
     }
 
-    # Under `irm | iex` the text may arrive with a leading BOM character.
-    $text = [System.IO.File]::ReadAllText($installer)
-    $null = Invoke-Expression ([string][char]0xFEFF + $text)
-    Assert-True 'script text with a BOM character loads through Invoke-Expression' ($null -ne (Get-Command Get-CpaPublisherId -ErrorAction SilentlyContinue))
+    # `irm | iex` hands the whole text to Invoke-Expression.
+    $null = Invoke-Expression $text
+    Assert-True 'script text loads through Invoke-Expression' ($null -ne (Get-Command Get-CpaPublisherId -ErrorAction SilentlyContinue))
 
     # --- static invariants ----------------------------------------------------
     Assert-Equal 'pinned package family' $script:CpaConst.PackageFamily 'Claude_pzs8sxrjxfjjc'
