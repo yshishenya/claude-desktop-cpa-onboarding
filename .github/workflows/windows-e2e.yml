@@ -1,12 +1,15 @@
 name: windows-e2e
 
-# Downloads the real Claude MSIX (~300 MB), verifies it, installs it on a
-# Windows runner and writes the CPA configuration with a fake key.
+# Real Windows end to end, with no real key: downloads the Claude MSIX (~300 MB),
+# verifies and installs it, points it at a fake CPA on localhost, launches Claude,
+# runs the installer a second time and keeps a screenshot as evidence.
 on:
   pull_request:
     paths:
       - install.ps1
       - tests/test-windows.ps1
+      - tests/e2e-assert.ps1
+      - tests/mock-cpa-server.py
       - .github/workflows/windows-e2e.yml
   schedule:
     - cron: "17 6 * * 1"
@@ -26,6 +29,8 @@ jobs:
     defaults:
       run:
         shell: powershell
+    env:
+      MOCK_LOG: ${{ github.workspace }}\mock-cpa.log
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -35,31 +40,62 @@ jobs:
         run: |
           & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -VerifyDownload
 
-      - name: Install and configure (fake key, no restart)
+      - name: Start a fake CPA on localhost
+        run: |
+          New-Item -ItemType File -Path $env:MOCK_LOG -Force | Out-Null
+          Start-Process python -ArgumentList 'tests/mock-cpa-server.py', '8787', $env:MOCK_LOG -WindowStyle Hidden
+          for ($i = 0; $i -lt 30; $i++) {
+            try { (Invoke-WebRequest http://127.0.0.1:8787/v1/models -UseBasicParsing -ErrorAction Stop) | Out-Null } catch {
+              if ($_.Exception.Response) { Write-Host 'fake CPA is up'; exit 0 }
+            }
+            Start-Sleep -Seconds 1
+          }
+          throw 'the fake CPA did not start'
+
+      - name: Install, configure and launch Claude (first run)
         env:
-          CPA_API_KEY: ci-not-a-real-key
+          CPA_API_KEY: ci-test-key
         run: |
-          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -NoRestart -Force -ClaudeOnly
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -BaseUrl http://127.0.0.1:8787 -Yes
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited with $LASTEXITCODE" }
 
-      - name: Check the written configuration
+      - name: Screenshot after the first launch
+        if: always()
         run: |
-          $support = Join-Path $env:LOCALAPPDATA 'Claude-3p'
-          $packaged = Join-Path $env:LOCALAPPDATA 'Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p'
-          if (-not (Test-Path (Join-Path $support 'configLibrary\_meta.json'))) { $support = $packaged }
-          $meta = Get-Content -Raw (Join-Path $support 'configLibrary\_meta.json') | ConvertFrom-Json
-          $prof = Get-Content -Raw (Join-Path $support ('configLibrary\' + $meta.appliedId + '.json')) | ConvertFrom-Json
-          $desktop = Get-Content -Raw (Join-Path $support 'claude_desktop_config.json') | ConvertFrom-Json
-          if ($prof.inferenceProvider -ne 'gateway') { throw 'provider is not gateway' }
-          if ($prof.inferenceGatewayBaseUrl -ne 'https://cpa.2brain.pro') { throw 'wrong base url' }
-          if ($desktop.deploymentMode -ne '3p') { throw 'deploymentMode is not 3p' }
-          $pkg = Get-AppxPackage -Name Claude | Where-Object PackageFamilyName -eq 'Claude_pzs8sxrjxfjjc'
-          if (-not $pkg) { throw 'Claude MSIX is not installed' }
-          Write-Host "Installed Claude $($pkg.Version) from $($pkg.InstallLocation); config in $support"
+          Start-Sleep -Seconds 15
+          New-Item -ItemType Directory -Path evidence -Force | Out-Null
+          try {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+            $bmp.Save((Join-Path $PWD 'evidence\screen-first-run.png'))
+            Write-Host "screenshot: $($b.Width)x$($b.Height)"
+          } catch { Write-Host "no screenshot: $($_.Exception.Message)" }
+          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object ProcessName, MainWindowTitle | Format-Table | Out-String | Write-Host
 
-      - name: Check mode (the fake key is expected to fail validation)
+      - name: Check the result of the first run
+        run: ./tests/e2e-assert.ps1 -MockLog $env:MOCK_LOG -Stage first
+
+      - name: Run the installer again (no new download, Claude is restarted)
+        env:
+          CPA_API_KEY: ci-test-key
         run: |
-          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -Check
-          Write-Host "exit code: $LASTEXITCODE"
+          $out = & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -BaseUrl http://127.0.0.1:8787 -Yes 6>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) { throw "second run exited with $LASTEXITCODE" }
+          if ($out -match 'downloads\.claude\.ai') { throw 'the second run downloaded the package again' }
+
+      - name: Check the result of the second run
+        run: ./tests/e2e-assert.ps1 -MockLog $env:MOCK_LOG -Stage second
+
+      - name: Check mode (informational)
+        env:
+          CPA_API_KEY: ci-test-key
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -Check -BaseUrl http://127.0.0.1:8787
+          Write-Host "check exit code: $LASTEXITCODE"
           exit 0
 
       - name: One-command launch through irm (as users run it)
@@ -71,3 +107,22 @@ jobs:
           $remote = & ([scriptblock]::Create((Invoke-RestMethod $env:RAW_URL))) -Help 6>&1 | Out-String
           if ($local -ne $remote) { Write-Host $remote; throw 'help text differs when loaded through irm (encoding problem?)' }
           Write-Host 'irm + scriptblock: OK'
+
+      - name: Collect logs
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Path evidence -Force | Out-Null
+          Copy-Item $env:MOCK_LOG evidence\mock-cpa.log -ErrorAction SilentlyContinue
+          foreach ($dir in (Join-Path $env:LOCALAPPDATA 'Claude-3p'), (Join-Path $env:LOCALAPPDATA 'Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p')) {
+            $log = Join-Path $dir 'Logs\main.log'
+            if (Test-Path $log) { Copy-Item $log evidence\claude-main.log; Get-Content $log -Tail 60 | ForEach-Object { Write-Host "  main.log: $_" } }
+          }
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-e2e-evidence
+          path: evidence
+          retention-days: 7
+          if-no-files-found: ignore

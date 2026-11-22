@@ -64,7 +64,7 @@ jobs:
           Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Scope CurrentUser -Force
           # install.ps1 is UTF-8 without a BOM on purpose: a BOM breaks `irm | iex`.
           $exclude = 'PSAvoidUsingWriteHost', 'PSUseShouldProcessForStateChangingFunctions', 'PSUseBOMForUnicodeEncodedFile'
-          $results = foreach ($file in 'install.ps1', 'tests/test-windows.ps1') {
+          $results = foreach ($file in 'install.ps1', 'tests/test-windows.ps1', 'tests/e2e-assert.ps1') {
             Invoke-ScriptAnalyzer -Path $file -Severity Warning, Error -ExcludeRule $exclude
           }
           $results | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
