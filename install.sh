@@ -48,6 +48,7 @@ DO_RESTART=1
 WITH_CHAT=0
 FORCE=0
 ASSUME_YES=0
+ASK_KEY=0
 CHECK=0
 DRY_RUN=0
 
@@ -141,6 +142,8 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
                        и заверено Apple.
   --force              Записать конфиг даже если проверка Claude не прошла.
   --yes                Не задавать вопросов (если ключ уже найден).
+  --ask-key            Не искать сохранённый ключ, а спросить новый
+                       (например, после замены или отзыва ключа).
   --help               Эта справка.
 
 Запуск с опциями без скачивания репозитория:
@@ -188,6 +191,7 @@ parse_args() {
       --with-chat) WITH_CHAT=1 ;;
       --force) FORCE=1 ;;
       --yes) ASSUME_YES=1 ;;
+      --ask-key) ASK_KEY=1 ;;
       --key) shift; [[ $# -gt 0 ]] || die "--key требует значение"; KEY="$1" ;;
       --key=*) KEY="${1#*=}" ;;
       --base-url) shift; [[ $# -gt 0 ]] || die "--base-url требует значение"; BASE_URL="$1" ;;
@@ -695,6 +699,23 @@ PY
   return 1
 }
 
+# Asks for a key on the terminal (up to 3 attempts); dies when none works.
+prompt_key() {
+  have_tty || die "Нет терминала для ввода ключа. Передай --key или CPA_API_KEY."
+  local _
+  for _ in 1 2 3; do
+    read_secret 'CPA API key: ' KEY || die "Нет терминала для ввода ключа. Передай --key или CPA_API_KEY."
+    [[ -n "$KEY" ]] || continue
+    if validate_key "$KEY"; then
+      KEY_SOURCE="interactive"
+      log "Использую CPA-ключ (fingerprint $(key_fingerprint "$KEY"))."
+      return 0
+    fi
+    warn "Ключ не прошёл проверку. Попробуй ещё раз."
+  done
+  die "Не удалось получить рабочий CPA-ключ."
+}
+
 resolve_key() {
   local -a keys=()
   local -a sources=()
@@ -747,6 +768,15 @@ resolve_key() {
     return 0
   fi
 
+  # --ask-key: the user wants to enter a new key (the stored one may be
+  # revoked or replaced), so saved keys are not even looked at.
+  if [[ "$ASK_KEY" -eq 1 && "$CHECK" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
+    [[ "$ASSUME_YES" -eq 1 ]] && die "--ask-key требует ввода ключа, а --yes запрещает вопросы."
+    log "Введите новый CPA-ключ."
+    prompt_key
+    return 0
+  fi
+
   local host
   host="$(url_host "$BASE_URL")"
   k="$(key_from_profile "$host")";         [[ -n "$k" ]] && add_candidate "$k" "Claude-3p profile"
@@ -760,18 +790,8 @@ resolve_key() {
     fi
     [[ "$ASSUME_YES" -eq 1 ]] && die "CPA-ключ не найден, а --yes запрещает вопросы. Передай --key или CPA_API_KEY."
     have_tty || die "CPA-ключ не найден. Передай --key или CPA_API_KEY."
-    local _
-    for _ in 1 2 3; do
-      read_secret 'CPA API key: ' KEY || die "Нет TTY для ввода ключа. Передай --key или CPA_API_KEY."
-      [[ -n "$KEY" ]] || continue
-      if validate_key "$KEY"; then
-        add_candidate "$KEY" "interactive"
-        log "Использую CPA-ключ (fingerprint $(key_fingerprint "$KEY"))."
-        return 0
-      fi
-      warn "Ключ не прошёл проверку. Попробуй ещё раз."
-    done
-    die "Не удалось получить рабочий CPA-ключ."
+    prompt_key
+    return 0
   fi
 
   local i
@@ -796,8 +816,14 @@ resolve_key() {
     return 1
   fi
 
-  [[ "$ASSUME_YES" -eq 1 ]] && die "Ни один CPA-ключ не прошёл проверку, а --yes запрещает вопросы."
-  [[ "$FORCE" -eq 1 ]] || die "Ни один CPA-ключ не прошёл проверку. Используй --force, чтобы записать конфиг всё равно."
+  # A stored key that no longer works was most likely revoked or replaced:
+  # ask for the new one instead of failing.
+  if [[ "$ASSUME_YES" -eq 0 ]] && have_tty; then
+    warn "Сохранённый CPA-ключ не подошёл (возможно, его заменили или отозвали)."
+    prompt_key
+    return 0
+  fi
+  [[ "$FORCE" -eq 1 ]] || die "Ни один CPA-ключ не прошёл проверку. Передай новый ключ через CPA_API_KEY или запусти в Терминале с --ask-key."
   KEY="${keys[0]}"
   KEY_SOURCE="${sources[0]}"
   warn "Записываю конфиг с ключом из $KEY_SOURCE несмотря на ошибку проверки (--force)."

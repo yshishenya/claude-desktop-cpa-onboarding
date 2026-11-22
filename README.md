@@ -108,11 +108,15 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash
 ```
 
-Сменить ключ или перенастроить, не трогая само приложение:
+Сменить ключ CPA (например, если выдали новый), не трогая само приложение.
+Скрипт не будет искать старый ключ и сразу попросит ввести новый:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --configure-only
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --configure-only --ask-key
 ```
+
+Если сохранённый ключ перестал работать, обычная команда установки тоже
+сама попросит ввести новый.
 
 Обычно запускать обновление вручную не нужно: Claude Desktop обновляется
 сам. Скрипт никогда не ставит более старую версию поверх новой.
@@ -129,6 +133,7 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 | `--no-restart` | Записать настройку, но не запускать Claude |
 | `--with-chat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
 | `--yes` | Не задавать вопросов, если ключ уже найден |
+| `--ask-key` | Не искать сохранённый ключ, а сразу спросить новый |
 | `--force` | Записать настройку, даже если проверка ключа не прошла |
 | `--base-url URL` | Другой адрес CPA (по умолчанию `https://cpa.2brain.pro`) |
 | `--dmg-url URL` | Установить приложение из своего файла DMG или ZIP. Файл всё равно должен пройти проверку подлинности |

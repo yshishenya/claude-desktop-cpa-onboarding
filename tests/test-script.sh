@@ -11,7 +11,7 @@ bash -n "$installer"
 
 # --- help -----------------------------------------------------------------
 help_text="$(bash "$installer" --help)"
-for needle in --check --dry-run --configure-only --with-chat --yes --base-url --dmg-url CPA_API_KEY "bash -s --"; do
+for needle in --check --dry-run --configure-only --with-chat --yes --ask-key --base-url --dmg-url CPA_API_KEY "bash -s --"; do
   grep -q -- "$needle" <<<"$help_text" || fail "help does not mention $needle"
 done
 
@@ -107,5 +107,21 @@ echo '{"inferenceGatewayBaseUrl": "https://gw.example.com", "inferenceGatewayApi
 expect "profile with other gateway" "$(key_from_profile "$host")" ""
 echo '{"inferenceGatewayBaseUrl": "https://cpa.2brain.pro", "inferenceGatewayApiKey": "cpa-key-from-profile"}' > "$lib/p1.json"
 expect "profile with CPA gateway" "$(key_from_profile "$host")" "cpa-key-from-profile"
+
+# --- key resolution without network ---------------------------------------
+# validate_key and have_tty are stubbed so nothing is sent anywhere.
+out="$( ( validate_key() { return 1; }; have_tty() { return 1; }
+          ASK_KEY=1; ASSUME_YES=1; resolve_key ) 2>&1 )"
+grep -q -- "--ask-key требует ввода ключа" <<<"$out" || fail "--ask-key with --yes must refuse to run"
+
+out="$( ( validate_key() { return 1; }; have_tty() { return 1; }
+          ASK_KEY=0; ASSUME_YES=0; FORCE=0; resolve_key ) 2>&1 )"
+grep -q -- "--ask-key" <<<"$out" || fail "a rejected stored key must point the user to --ask-key"
+
+out="$( ( validate_key() { [[ "$1" == "new-key" ]]; }; have_tty() { return 0; }
+          read_secret() { printf -v "$2" '%s' "new-key"; }
+          ASK_KEY=0; ASSUME_YES=0; FORCE=0; resolve_key >/dev/null 2>&1
+          printf '%s|%s' "$KEY" "$KEY_SOURCE" ) 2>&1 )"
+expect "rejected stored key falls back to a prompt" "$out" "new-key|interactive"
 
 echo "static checks OK"
