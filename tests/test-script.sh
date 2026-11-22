@@ -22,17 +22,42 @@ grep -q 'inferenceProvider' "$installer"
 grep -q 'deploymentMode' "$installer"
 grep -q 'inferenceGatewayBaseUrl' "$installer"
 grep -q 'MAIN_MODEL_SPECS' "$installer"
-grep -q 'sonnet-4-argon-cpa' "$installer"
+grep -q 'sonnet-terra-6-1-claude-code' "$installer"
 grep -q '^WITH_MAIN_MODELS=1$' "$installer" || fail "main models must be enabled by default"
 python3 - "$repo_dir/scripts/sync-cpa-main-models.py" <<'PY'
 import pathlib, sys
 path = pathlib.Path(sys.argv[1])
 compile(path.read_text(encoding="utf-8"), str(path), "exec")
 PY
-for alias in sonnet-4-5-cpa haiku-4-5-cpa opus-6-2-astra-cpa sonnet-6-2-sol-cpa haiku-6-luna-cpa sonnet-4-argon-cpa; do
+for alias in opus-astra-6-2-claude-code sonnet-sol-6-2-claude-code sonnet-terra-6-1-claude-code haiku-luna-6-claude-code; do
   grep -q -- "$alias" "$installer" || fail "install.sh does not mention $alias"
   grep -q -- "$alias" "$repo_dir/scripts/sync-cpa-main-models.py" || fail "sync script does not mention $alias"
 done
+# The main models are GPT 6.x only; DeepSeek and Gemini are no longer defaults.
+if sed -n '/^MAIN_MODEL_SPECS=(/,/^)/p' "$installer" | grep -q -i -E 'deepseek|gemini'; then
+  fail "DeepSeek and Gemini must not be default main models"
+fi
+# The install.sh list, the sync script and the vendor-name filter must agree.
+python3 -I - "$installer" "$repo_dir/scripts/sync-cpa-main-models.py" <<'PY' || fail "main models differ between install.sh and the sync script, or a name is rejected by the filter"
+import re, sys
+sh = open(sys.argv[1], encoding="utf-8").read()
+block = sh.split("MAIN_MODEL_SPECS=(")[1].split("\n)")[0]
+specs = [s.split("=") for s in re.findall(r"'([^']+)'", block)]
+pattern = "".join(re.findall(r'r"([^"]*)"', sh.split("NON_ANTHROPIC = re.compile(")[1].split("re.I,")[0]))
+vendor = re.compile(pattern, re.I)
+ns = {}
+exec(open(sys.argv[2], encoding="utf-8").read().split("class ApiError")[0].split("import urllib.request")[1], ns)
+synced = [(m["alias"], m["label"], m["behaves_as"]) for m in ns["MAIN_MODELS"]]
+assert [tuple(s) for s in specs] == synced, (specs, synced)
+for name, _label, _behaves in specs:
+    assert not vendor.search(name), "Claude Desktop would drop " + name
+    assert name.startswith(("opus-", "sonnet-", "haiku-")) and name.endswith("-claude-code"), name
+sources = {m["alias"]: m["source"] for m in ns["MAIN_MODELS"]}
+assert sources["sonnet-terra-6-1-claude-code"] == "gpt-6.1-terra"
+claude = {m["alias"] for m in ns["CLAUDE_MODELS"]}
+assert claude == {"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"}, claude
+PY
+python3 -I "$repo_dir/tests/test-sync-models.py" || fail "sync script test failed"
 grep -q 'APP_TEAM_ID="Q6L2SF6YDW"' "$installer" || fail "Anthropic Team ID check is missing"
 grep -q 'source=Notarized Developer ID' "$installer" || fail "notarization check is missing"
 

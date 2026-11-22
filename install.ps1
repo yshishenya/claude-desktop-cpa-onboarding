@@ -75,12 +75,10 @@ $script:CpaConst = @{
     # Main non-Claude models. Keep in sync with MAIN_MODEL_SPECS in install.sh
     # and scripts/sync-cpa-main-models.py (a test checks install.sh).
     MainModels    = @(
-        @{ name = 'sonnet-4-5-cpa';      label = 'DeepSeek V4 Pro';     behavesAs = 'claude-sonnet-5' },
-        @{ name = 'haiku-4-5-cpa';       label = 'DeepSeek V4.1 Flash'; behavesAs = 'claude-haiku-5-5' },
-        @{ name = 'opus-6-2-astra-cpa';  label = 'GPT 6.2 Astra';       behavesAs = 'claude-opus-5-5' },
-        @{ name = 'sonnet-6-2-sol-cpa';  label = 'GPT 6.2 Sol';         behavesAs = 'claude-sonnet-5' },
-        @{ name = 'haiku-6-luna-cpa';    label = 'GPT-6 Luna';          behavesAs = 'claude-haiku-5-5' },
-        @{ name = 'sonnet-4-argon-cpa';  label = 'Gemini 4 Argon';      behavesAs = 'claude-sonnet-5' }
+        @{ name = 'opus-astra-6-2-claude-code';    label = 'GPT 6.2 Astra'; behavesAs = 'claude-opus-5-5' },
+        @{ name = 'sonnet-sol-6-2-claude-code';    label = 'GPT 6.2 Sol';   behavesAs = 'claude-sonnet-5' },
+        @{ name = 'sonnet-terra-6-1-claude-code';  label = 'GPT 6.1 Terra'; behavesAs = 'claude-sonnet-5' },
+        @{ name = 'haiku-luna-6-claude-code';      label = 'GPT-6 Luna';    behavesAs = 'claude-haiku-5-5' }
     )
     CaskUrl       = 'https://formulae.brew.sh/api/cask/claude.json'
     WingetRaw     = 'https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/a/Anthropic/Claude'
@@ -149,7 +147,7 @@ claude-desktop-cpa — установка/обновление Claude Desktop н
   -NoRestart       Записать настройку, но не запускать Claude.
   -WithChat        Показать вкладку Chat (ей нужен вход в claude.ai).
   -WithMainModels  Добавить основные модели CPA (включено по умолчанию).
-  -ClaudeOnly      Не добавлять основные модели CPA (DeepSeek, GPT, Gemini).
+  -ClaudeOnly      Не добавлять основные модели CPA (GPT 6.x).
                    Модели, добавленные раньше, остаются в списке; чтобы
                    убрать их, используйте -RemoveModel.
   -ListModels      Показать модели Claude, доступные ключу CPA.
@@ -188,8 +186,8 @@ claude-desktop-cpa — установка/обновление Claude Desktop н
     семейства (sonnet, haiku) в имени, опубликованный в CPA; третий элемент
     задаёт Claude-модель, чьи лимиты и уровни effort использовать:
     ID=Подпись=claude-sonnet-5;
-  - по умолчанию добавляются основные модели CPA (DeepSeek V4 Pro/Flash,
-    GPT 6.2 Astra/Sol, GPT-6 Luna, Gemini 4 Argon), но только те, к которым
+  - по умолчанию добавляются основные модели CPA (GPT 6.2 Astra, GPT 6.2 Sol,
+    GPT 6.1 Terra, GPT-6 Luna; alias вида opus-astra-6-2-claude-code), но только те, к которым
     есть доступ у ключа; alias для них администратор создаёт один раз на
     сервере скриптом scripts/sync-cpa-main-models.py;
   - после изменения списка Claude нужно перезапустить.
@@ -945,7 +943,7 @@ function Update-CpaModelFile {
             if (-not $name) { Stop-Cpa 'пустой ID модели' }
             $bad = $script:CpaConst.NonAnthropicRegex.Match($name)
             if ($bad.Success) {
-                Stop-Cpa ('Claude Desktop отбросит «{0}»: в имени есть «{1}». Опубликуйте модель в CPA под alias с «claude-» или названием семейства (sonnet, haiku) в имени, например sonnet-4-5-cpa, и добавьте этот alias.' -f $name, $bad.Value)
+                Stop-Cpa ('Claude Desktop отбросит «{0}»: в имени есть «{1}». Опубликуйте модель в CPA под alias с «claude-» или названием семейства (sonnet, haiku) в имени, например sonnet-sol-6-2-claude-code, и добавьте этот alias.' -f $name, $bad.Value)
             }
             if (-not $label) { $label = $name }
             $tierSource = $name

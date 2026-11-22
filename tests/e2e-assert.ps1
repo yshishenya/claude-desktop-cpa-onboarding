@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$expectedModels = 'claude-sonnet-5-5,claude-opus-5-5,claude-haiku-5-5,sonnet-4-5-cpa,haiku-4-5-cpa'
+$expectedModels = 'claude-sonnet-5-5,claude-opus-5-5,claude-haiku-5-5,sonnet-sol-6-2-claude-code,haiku-luna-6-claude-code'
 
 $base = Join-Path $env:LOCALAPPDATA 'Claude-3p'
 $packaged = Join-Path $env:LOCALAPPDATA 'Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p'
@@ -41,7 +41,7 @@ if (@($fromInstaller | Where-Object { -not $_.key_ok }).Count -gt 0) { throw 'th
 $fromApp = @($entries | Where-Object { $_.ua -notlike 'claude-desktop-cpa*' })
 Write-Host "requests from the installer: $($fromInstaller.Count); from other clients (the app): $($fromApp.Count)"
 $probed = @($fromInstaller | Where-Object { $_.method -eq 'POST' } | ForEach-Object { $_.model })
-foreach ($alias in 'sonnet-4-5-cpa', 'haiku-4-5-cpa', 'opus-6-2-astra-cpa', 'sonnet-6-2-sol-cpa', 'haiku-6-luna-cpa', 'sonnet-4-argon-cpa', 'claude-haiku-5-5') {
+foreach ($alias in 'opus-astra-6-2-claude-code', 'sonnet-sol-6-2-claude-code', 'sonnet-terra-6-1-claude-code', 'haiku-luna-6-claude-code', 'claude-haiku-5-5') {
     if ($probed -notcontains $alias) { throw "the installer never probed $alias" }
 }
 
