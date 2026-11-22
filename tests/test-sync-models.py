@@ -70,6 +70,7 @@ STATE = {
     ],
 }
 CALLS = []
+FAULTS = {"reset_rpm": False}  # makes the fake server misbehave on PATCH, to test the read-back
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -119,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             for i, key in enumerate(STATE["keys"]):
                 if key["id"] == payload["id"]:
                     merged = {**key, **payload}
+                    if FAULTS["reset_rpm"]:
+                        merged["rpm"] = 0  # the server silently resets a limit
                     if "aliases" not in payload:
                         # The defect documented for the real Key Policy: a PATCH that
                         # does not carry `aliases` is reported as a success, but the
@@ -280,7 +283,16 @@ def main():
     if code != 0 or STATE != after_revoke:
         fail("a second revoke must change nothing: " + out)
 
-    # 5. A wrong token is refused and nothing is written.
+    # 5. The revoke read-back catches a change other than the revoked alias.
+    k2 = next(k for k in STATE["keys"] if k["id"] == "k2")
+    k2["rpm"] = 30
+    FAULTS["reset_rpm"] = True
+    code, out = run(url, "--key-name", "other-user", "--revoke-alias", legacy, "--apply", backup=backup)
+    FAULTS["reset_rpm"] = False
+    if code == 0 or "изменилось что-то кроме" not in out:
+        fail("the revoke read-back must notice a reset limit: " + out)
+
+    # 6. A wrong token is refused and nothing is written.
     env = {**os.environ, "CPA_MANAGEMENT_KEY": "wrong-token"}
     done = subprocess.run([sys.executable, "-I", SCRIPT, "--url", url, "--key-name", "x"],
                           capture_output=True, text=True, env=env, timeout=60)

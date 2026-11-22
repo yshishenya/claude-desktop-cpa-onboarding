@@ -285,7 +285,6 @@ ManifestType: installer
     Assert-Equal 'legacy cleanup keeps current models' ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ',') 'sonnet-4-5-cpa,claude-opus-4-8'
     $said = (& { Remove-CpaLegacyModel } 6>&1 | Out-String)
     Assert-Equal 'legacy cleanup is silent when there is nothing to remove' $said.Trim() ''
-    Remove-Item -LiteralPath $modelFile -Force -ErrorAction SilentlyContinue
 
     # Main models and -ListModels, with the HTTP layer stubbed.
     $script:stubStatus = @{}

@@ -245,17 +245,37 @@ def revoke(args, token: str, api_base: str) -> int:
                 f: v for f, v in key.items() if f not in ("updated_at", "usage")
             }:
                 problems.append(f"изменился ключ, который не выбирали: {key.get('name')}")
+    def complete(item: dict) -> dict:
+        """Every field except the ones that change on their own; lists are never None."""
+        out = {f: v for f, v in item.items() if f not in ("updated_at", "usage")}
+        out["models"] = list(out.get("models") or [])
+        out["aliases"] = list(out.get("aliases") or [])
+        return out
+
     for key, present in updates:
         after = keys_after.get(key["id"], {})
         label = key.get("name") or key["id"]
+        drop = set(present)
         left_models = {m["alias"] for m in (after.get("models") or [])}
         left_aliases = key_alias_names(after)
         for name in present:
             if name in left_models or name in left_aliases:
                 problems.append(f"{label}: {name} всё ещё есть")
-        expected = {m["alias"] for m in (key.get("models") or [])} - set(present)
-        if left_models != expected or left_aliases != (key_alias_names(key) - set(present)):
-            problems.append(f"{label}: изменилось что-то кроме отозванных alias")
+        # The key must be exactly what it was, minus the revoked entries: every
+        # route of every kept alias (provider, target, billing), the limits and
+        # the other fields.
+        expected = complete(key)
+        expected["models"] = [
+            m for m in expected["models"] if not (isinstance(m, dict) and m.get("alias") in drop)
+        ]
+        expected["aliases"] = [
+            item for item in expected["aliases"]
+            if (item.get("alias") if isinstance(item, dict) else item) not in drop
+        ]
+        if complete(after) != expected:
+            problems.append(
+                f"{label}: изменилось что-то кроме отозванных alias (маршруты, лимиты или другие поля)"
+            )
     if problems:
         print("\nПроверка не прошла:")
         for problem in problems:
