@@ -145,7 +145,7 @@ Claude Sonnet 5.5, Opus 5.5 и Haiku 5.5.
 **macOS** (Терминал):
 
 ```bash
-read -rs -p 'Вставьте ключ и нажмите Enter: ' K; echo; printf 'символов: %s\nотпечаток: %s\n' "$(printf %s "$K" | wc -c | tr -d ' ')" "$(printf %s "$K" | shasum -a 256 | cut -c1-8)"; printf 'x-api-key: %s\n' "$K" | curl -sS -o /dev/null -w 'ответ сервера: HTTP %{http_code}\n' -H @- https://cpa.2brain.pro/v1/models
+printf 'Вставьте ключ и нажмите Enter: '; read -rs K; echo; printf 'символов: %s\nотпечаток: %s\n' "$(printf %s "$K" | wc -c | tr -d ' ')" "$(printf %s "$K" | shasum -a 256 | cut -c1-8)"; printf 'x-api-key: %s\n' "$K" | curl -sS -o /dev/null -w 'ответ сервера: HTTP %{http_code}\n' -H @- https://cpa.2brain.pro/v1/models
 ```
 
 **Windows** (PowerShell):
