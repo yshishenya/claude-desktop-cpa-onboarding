@@ -40,6 +40,16 @@ readonly MODEL_SONNET="claude-sonnet-5-5"
 readonly MODEL_OPUS="claude-opus-5-5"
 readonly MODEL_HAIKU="claude-haiku-5-5"
 
+# Main non-Claude models. Keep in sync with scripts/sync-cpa-main-models.py.
+MAIN_MODEL_SPECS=(
+  'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5'
+  'haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5'
+  'opus-6-2-astra-cpa=GPT 6.2 Astra=claude-opus-5-5'
+  'sonnet-6-2-sol-cpa=GPT 6.2 Sol=claude-sonnet-5'
+  'haiku-6-luna-cpa=GPT-6 Luna=claude-haiku-5-5'
+  'sonnet-4-argon-cpa=Gemini 4 Argon=claude-sonnet-5'
+)
+
 BASE_URL="${DEFAULT_BASE_URL}"
 KEY=""
 DMG_URL=""
@@ -48,6 +58,7 @@ DO_UPDATE=1
 DO_CONFIGURE=1
 DO_RESTART=1
 WITH_CHAT=0
+WITH_MAIN_MODELS=0
 FORCE=0
 ASSUME_YES=0
 ASK_KEY=0
@@ -251,6 +262,8 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   --no-update          Не обновлять приложение.
   --no-restart         Записать конфиг, но не запускать Claude.
   --with-chat          Показать вкладку Chat (ей нужен вход в claude.ai).
+  --with-main-models   Добавить основные модели CPA: DeepSeek, GPT 6.x,
+                       Gemini 4. Нужны alias в CPA и доступ ключа.
   --list-models        Показать модели Claude, доступные ключу CPA.
   --add-model SPEC     Добавить модель в список Claude. SPEC: ID,
                        ID=Подпись или ID=Подпись=Claude-модель.
@@ -301,6 +314,14 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   - tier (sonnet/opus/haiku/fable/mythos) определяется по ID модели;
   - после изменения списка Claude нужно перезапустить.
 
+Основные модели CPA:
+  - --with-main-models добавляет DeepSeek V4 Pro/Flash, GPT 6.2 Astra/Sol,
+    GPT-6 Luna и Gemini 4 Argon;
+  - alias для них создаются один раз на сервере скриптом
+    scripts/sync-cpa-main-models.py (нужен management key);
+  - обычному пользователю management key не нужен: установщик только
+    проверяет доступ и записывает alias в профиль Claude.
+
 Источник установки:
   - официальный Homebrew cask claude (ZIP), актуальная версия из
     https://formulae.brew.sh/api/cask/claude.json;
@@ -324,6 +345,7 @@ parse_args() {
       --no-update) DO_UPDATE=0 ;;
       --no-restart) DO_RESTART=0 ;;
       --with-chat) WITH_CHAT=1 ;;
+      --with-main-models) WITH_MAIN_MODELS=1 ;;
       --list-models) LIST_MODELS=1; DO_INSTALL=0; DO_UPDATE=0; DO_CONFIGURE=0; DO_RESTART=0 ;;
       --add-model) shift; [[ $# -gt 0 ]] || die "--add-model требует значение"; ADD_MODELS+=("$1") ;;
       --add-model=*) ADD_MODELS+=("${1#*=}") ;;
@@ -840,6 +862,57 @@ PY
 }
 
 # Asks for a key on the terminal (up to 3 attempts); dies when none works.
+# One cheap request to see whether the current CPA key can use an alias.
+probe_model() {
+  local model="$1" hdr body req code
+  hdr="$(new_tmp_file)"
+  body="$(new_tmp_file)"
+  req="$(new_tmp_file)"
+  printf 'x-api-key: %s\n' "$KEY" > "$hdr"
+  printf '{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}\n' "$model" > "$req"
+  code="$(curl -sS --max-time 45 -o "$body" -w '%{http_code}' \
+    -X POST "$BASE_URL/v1/messages" \
+    -H @"$hdr" \
+    -H 'anthropic-version: 2023-06-01' \
+    -H 'content-type: application/json' \
+    --data-binary @"$req" 2>/dev/null || echo 000)"
+  case "$code" in
+    200)
+      python3 - "$body" <<'PY' >/dev/null 2>&1
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if data.get("type") == "message" else 1)
+PY
+      ;;
+    429|5*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Add only the main models that the configured CPA key can actually use.
+apply_main_models() {
+  local -a good=()
+  local spec alias
+  log "Проверяю основные модели CPA..."
+  for spec in "${MAIN_MODEL_SPECS[@]}"; do
+    alias="${spec%%=*}"
+    if probe_model "$alias"; then
+      good+=("$spec")
+      log "  $alias: OK"
+    else
+      warn "  $alias: нет доступа у ключа CPA, пропускаю"
+    fi
+  done
+  if [[ ${#good[@]} -eq 0 ]]; then
+    warn "Основные модели не добавлены: проверь alias в CPA и доступ ключа."
+    return 0
+  fi
+  update_models_file add "${good[@]}"
+}
+
 prompt_key() {
   have_tty || die "Нет терминала для ввода ключа. Передай --key или CPA_API_KEY."
   local _
@@ -1366,6 +1439,13 @@ main() {
     fi
     log "3P config: $SUPPORT_DIR"
     log "models: $MODEL_SONNET, $MODEL_OPUS, $MODEL_HAIKU"
+    if [[ "$WITH_MAIN_MODELS" -eq 1 ]]; then
+      log "main models:"
+      local main_spec
+      for main_spec in "${MAIN_MODEL_SPECS[@]}"; do
+        log "  ${main_spec%%=*}"
+      done
+    fi
     local extra
     extra="$(models_summary)"
     [[ -n "$extra" ]] && log "extra models: $extra"
@@ -1384,6 +1464,9 @@ main() {
   if [[ "$DO_CONFIGURE" -eq 1 ]]; then
     resolve_key
     KEY_SOURCE="${KEY_SOURCE:-unknown}"
+    if [[ "$WITH_MAIN_MODELS" -eq 1 ]]; then
+      apply_main_models
+    fi
     quit_app
     write_config
     if [[ "$DO_RESTART" -eq 1 ]]; then
