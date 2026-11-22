@@ -277,6 +277,16 @@ ManifestType: installer
     # Windows PowerShell 5.1 puts line breaks inside the empty array, so ignore whitespace.
     Assert-Equal 'removing everything leaves an empty JSON array' ((Get-Content -Raw -LiteralPath $modelFile) -replace '\s', '') '[]'
 
+    # Old default aliases that were deleted on the server are removed; other models stay.
+    Remove-Item -LiteralPath $modelFile -Force -ErrorAction SilentlyContinue
+    Update-CpaModelFile -Mode add -Spec 'opus-6-2-astra-cpa=GPT 6.2 Astra=claude-opus-5-5', 'sonnet-6-2-sol-cpa=GPT 6.2 Sol=claude-sonnet-5', 'haiku-6-luna-cpa=GPT-6 Luna=claude-haiku-5-5', 'sonnet-4-argon-cpa=Gemini 4 Argon=claude-sonnet-5', 'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5', 'claude-opus-4-8=Opus 4.8' 6>$null
+    $said = (& { Remove-CpaLegacyModel } 6>&1 | Out-String)
+    Assert-True 'legacy cleanup says what it did' ($said.Trim().Length -gt 0)
+    Assert-Equal 'legacy cleanup keeps current models' ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ',') 'sonnet-4-5-cpa,claude-opus-4-8'
+    $said = (& { Remove-CpaLegacyModel } 6>&1 | Out-String)
+    Assert-Equal 'legacy cleanup is silent when there is nothing to remove' $said.Trim() ''
+    Remove-Item -LiteralPath $modelFile -Force -ErrorAction SilentlyContinue
+
     # Main models and -ListModels, with the HTTP layer stubbed.
     $script:stubStatus = @{}
     function Invoke-CpaHttp {

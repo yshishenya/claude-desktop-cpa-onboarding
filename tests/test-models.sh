@@ -88,4 +88,22 @@ assert [m["name"] for m in models] == [
 ], models
 PY
 
+# Old default aliases that were deleted on the server are removed on every run;
+# other models (also DeepSeek aliases that still exist) stay.
+update_models_file add \
+  'opus-6-2-astra-cpa=GPT 6.2 Astra=claude-opus-5-5' \
+  'sonnet-6-2-sol-cpa=GPT 6.2 Sol=claude-sonnet-5' \
+  'haiku-6-luna-cpa=GPT-6 Luna=claude-haiku-5-5' \
+  'sonnet-4-argon-cpa=Gemini 4 Argon=claude-sonnet-5' \
+  'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' >/dev/null
+out="$(prune_legacy_models)"
+[[ "$out" == *"Убрал устаревшие alias"* ]] || fail "the legacy cleanup must say what it did"
+python3 - "$MODELS_FILE" <<'PY'
+import json, sys
+names = [m["name"] for m in json.load(open(sys.argv[1], encoding="utf-8"))]
+assert names == ["claude-opus-4-8", "opencode-go/claude-sonnet-4-5-cpa", "sonnet-4-5-cpa"], names
+PY
+out="$(prune_legacy_models)"
+[[ -z "$out" ]] || fail "the legacy cleanup must be silent when there is nothing to remove: $out"
+
 echo "model tests OK"

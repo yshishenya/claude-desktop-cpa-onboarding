@@ -69,6 +69,9 @@ $script:CpaConst = @{
         @{ name = 'claude-opus-5-5';   label = 'Claude Opus 5.5';   tier = 'opus' },
         @{ name = 'claude-haiku-5-5';  label = 'Claude Haiku 5.5';  tier = 'haiku' }
     )
+    # Old default aliases that were deleted from the CPA server. Every run removes
+    # them from models.json, so Claude Desktop does not list models that now answer 401.
+    LegacyAliases = @('opus-6-2-astra-cpa', 'sonnet-6-2-sol-cpa', 'haiku-6-luna-cpa', 'sonnet-4-argon-cpa')
     ModelTiers    = @('fable', 'mythos', 'opus', 'haiku', 'sonnet')
     ModelKeys     = @('name', 'labelOverride', 'supports1m', 'prefer1m', 'anthropicFamilyTier', 'isFamilyDefault', 'behavesAs', 'maxEffort')
     NonAnthropicRegex = [regex]::new($script:CpaNonAnthropicPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
@@ -977,6 +980,14 @@ function Update-CpaModelFile {
     Write-CpaJsonFile $path ([object[]]$data.ToArray())
 }
 
+# Drops the legacy aliases from models.json (quiet when there is nothing to drop).
+function Remove-CpaLegacyModel {
+    if (-not (Test-Path -LiteralPath (Get-CpaModelFile))) { return }
+    $before = @(Read-CpaModelFile).Count
+    Update-CpaModelFile -Mode remove -Spec ([string[]]$script:CpaConst.LegacyAliases) 6>$null
+    if (@(Read-CpaModelFile).Count -lt $before) { Write-CpaLog 'Убрал устаревшие alias, которых больше нет на сервере CPA.' }
+}
+
 # One cheap request to see whether the current CPA key can use an alias.
 function Test-CpaModelAccess {
     param([string]$Model)
@@ -1295,6 +1306,7 @@ function Invoke-CpaMain {
         }
 
         $null = Resolve-CpaKey
+        Remove-CpaLegacyModel
         if ($script:Opt.MainModels) { Add-CpaMainModel }
         Stop-CpaApp
         Write-CpaConfig
