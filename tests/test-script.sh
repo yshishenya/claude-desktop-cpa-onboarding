@@ -11,7 +11,7 @@ bash -n "$installer"
 
 # --- help -----------------------------------------------------------------
 help_text="$(bash "$installer" --help)"
-for needle in --check --dry-run --configure-only --with-chat --yes --ask-key --base-url --dmg-url --list-models --add-model --remove-model CPA_API_KEY "bash -s --"; do
+for needle in --check --dry-run --configure-only --with-chat --with-main-models --yes --ask-key --base-url --dmg-url --list-models --add-model --remove-model CPA_API_KEY "bash -s --"; do
   grep -q -- "$needle" <<<"$help_text" || fail "help does not mention $needle"
 done
 
@@ -21,6 +21,17 @@ grep -q 'Claude-3p' "$installer"
 grep -q 'inferenceProvider' "$installer"
 grep -q 'deploymentMode' "$installer"
 grep -q 'inferenceGatewayBaseUrl' "$installer"
+grep -q 'MAIN_MODEL_SPECS' "$installer"
+grep -q 'sonnet-4-argon-cpa' "$installer"
+python3 - "$repo_dir/scripts/sync-cpa-main-models.py" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+compile(path.read_text(encoding="utf-8"), str(path), "exec")
+PY
+for alias in sonnet-4-5-cpa haiku-4-5-cpa opus-6-2-astra-cpa sonnet-6-2-sol-cpa haiku-6-luna-cpa sonnet-4-argon-cpa; do
+  grep -q -- "$alias" "$installer" || fail "install.sh does not mention $alias"
+  grep -q -- "$alias" "$repo_dir/scripts/sync-cpa-main-models.py" || fail "sync script does not mention $alias"
+done
 grep -q 'APP_TEAM_ID="Q6L2SF6YDW"' "$installer" || fail "Anthropic Team ID check is missing"
 grep -q 'source=Notarized Developer ID' "$installer" || fail "notarization check is missing"
 

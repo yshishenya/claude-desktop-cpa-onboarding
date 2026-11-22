@@ -21,6 +21,7 @@ claude.ai.
 - [Если что-то пошло не так](#если-что-то-пошло-не-так)
 - [Проверка, обновление и повторная настройка](#проверка-обновление-и-повторная-настройка)
 - [Другие модели](#другие-модели)
+- [Основные модели CPA](#основные-модели-cpa)
 - [Как вернуть всё обратно](#как-вернуть-всё-обратно)
 - [Безопасность и ваши данные](#безопасность-и-ваши-данные)
 - [Подробности для специалистов](#подробности-для-специалистов)
@@ -133,6 +134,7 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 | `--no-update` | Не обновлять приложение, если оно уже стоит |
 | `--no-restart` | Записать настройку, но не запускать Claude |
 | `--with-chat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
+| `--with-main-models` | Добавить основные модели CPA: DeepSeek, GPT 6.x, Gemini 4 |
 | `--list-models` | Показать модели Claude, доступные вашему ключу CPA |
 | `--add-model SPEC` | Добавить модель в список Claude: `ID`, `ID=Подпись` или `ID=Подпись=Claude-модель` |
 | `--remove-model ID` | Убрать модель, добавленную через `--add-model` |
@@ -224,6 +226,72 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 - Даже с alias поведение не-Claude модели зависит от CPA и может отличаться
   от Claude: приложение ожидает Claude-специфичные возможности. Для
   повседневной работы надёжнее модели Claude.
+
+## Основные модели CPA
+
+Это короткий набор моделей, который установщик умеет добавлять одной
+командой:
+
+| Подпись в Claude | Alias | Модель в CPA |
+|---|---|---|
+| DeepSeek V4 Pro | `sonnet-4-5-cpa` | `opencode-go/deepseek-v4-pro` |
+| DeepSeek V4.1 Flash | `haiku-4-5-cpa` | `opencode-go/deepseek-v4.1-flash` |
+| GPT 6.2 Astra | `opus-6-2-astra-cpa` | `gpt-6.2-astra` |
+| GPT 6.2 Sol | `sonnet-6-2-sol-cpa` | `gpt-6.2-sol` |
+| GPT-6 Luna | `haiku-6-luna-cpa` | `gpt-6-luna` |
+| Gemini 4 Argon | `sonnet-4-argon-cpa` | `opencode-go/gemini-4-argon` |
+
+### Один раз на сервере
+
+Alias создаются **не у каждого пользователя**, а один раз в CPA. Есть два
+уровня:
+
+1. **Глобальный alias** — имя, которое видит клиент, и маршрут к модели CPA.
+2. **Доступ ключа** — alias нужно добавить в список моделей конкретного
+   ключа CPA.
+
+Скрипт `scripts/sync-cpa-main-models.py` делает оба шага через management
+API CPA. По умолчанию он только показывает план:
+
+```bash
+python3 scripts/sync-cpa-main-models.py --all-keys
+```
+
+Применить изменения для всех существующих ключей:
+
+```bash
+python3 scripts/sync-cpa-main-models.py --all-keys --apply
+```
+
+Скрипт попросит management key скрытым вводом. Его также можно передать
+через `CPA_MANAGEMENT_KEY` или `--management-key-file`. Management key — это
+административный секрет: не вставляйте его в историю shell и не передавайте
+пользователям.
+
+Перед изменениями скрипт сохраняет снимок политики в
+`cpa-policy-backup-<дата>.json` (права `600`). После применения он читает
+политику заново и проверяет, что alias и доступы появились.
+
+Если позже вы создадите новый ключ CPA, повторите команду с `--all-keys` —
+она добавит ему те же модели.
+
+### На каждом Mac
+
+Пользователю management key не нужен. Установщик проверяет, какие из
+основных alias доступны его ключу, и добавляет только их:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --with-main-models
+```
+
+Или из клонированного репозитория:
+
+```bash
+./install.sh --with-main-models
+```
+
+Модели, к которым у ключа нет доступа, пропускаются с предупреждением.
+Повторный запуск без `--with-main-models` уже добавленные модели не удаляет.
 
 ## Как вернуть всё обратно
 
@@ -383,9 +451,13 @@ shellcheck -x install.sh tests/test-script.sh tests/test-models.sh
 bash tests/test-script.sh
 ```
 
-CI проверяет синтаксис, ShellCheck, справку, правила поиска ключей и
-`--dry-run` на macOS. Тесты используют временную домашнюю папку и не читают
-настоящие настройки разработчика.
+```bash
+python3 -m py_compile scripts/sync-cpa-main-models.py
+```
+
+CI проверяет синтаксис, ShellCheck, справку, правила поиска ключей,
+синтаксис Python-скрипта и `--dry-run` на macOS. Тесты используют временную
+домашнюю папку и не читают настоящие настройки разработчика.
 
 ## Помощь и обратная связь
 
