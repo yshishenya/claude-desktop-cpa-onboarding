@@ -11,7 +11,7 @@ bash -n "$installer"
 
 # --- help -----------------------------------------------------------------
 help_text="$(bash "$installer" --help)"
-for needle in --check --dry-run --configure-only --with-chat --yes --ask-key --base-url --dmg-url CPA_API_KEY "bash -s --"; do
+for needle in --check --dry-run --configure-only --with-chat --yes --ask-key --base-url --dmg-url --list-models --add-model --remove-model CPA_API_KEY "bash -s --"; do
   grep -q -- "$needle" <<<"$help_text" || fail "help does not mention $needle"
 done
 
@@ -123,5 +123,7 @@ out="$( ( validate_key() { [[ "$1" == "new-key" ]]; }; have_tty() { return 0; }
           ASK_KEY=0; ASSUME_YES=0; FORCE=0; resolve_key >/dev/null 2>&1
           printf '%s|%s' "$KEY" "$KEY_SOURCE" ) 2>&1 )"
 expect "rejected stored key falls back to a prompt" "$out" "new-key|interactive"
+
+bash "$repo_dir/tests/test-models.sh"
 
 echo "static checks OK"

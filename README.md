@@ -20,6 +20,7 @@ claude.ai.
 - [Как понять, что всё получилось](#как-понять-что-всё-получилось)
 - [Если что-то пошло не так](#если-что-то-пошло-не-так)
 - [Проверка, обновление и повторная настройка](#проверка-обновление-и-повторная-настройка)
+- [Другие модели](#другие-модели)
 - [Как вернуть всё обратно](#как-вернуть-всё-обратно)
 - [Безопасность и ваши данные](#безопасность-и-ваши-данные)
 - [Подробности для специалистов](#подробности-для-специалистов)
@@ -132,6 +133,9 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 | `--no-update` | Не обновлять приложение, если оно уже стоит |
 | `--no-restart` | Записать настройку, но не запускать Claude |
 | `--with-chat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
+| `--list-models` | Показать модели Claude, доступные вашему ключу CPA |
+| `--add-model SPEC` | Добавить модель в список Claude: `ID` или `ID=Подпись` |
+| `--remove-model ID` | Убрать модель, добавленную через `--add-model` |
 | `--yes` | Не задавать вопросов, если ключ уже найден |
 | `--ask-key` | Не искать сохранённый ключ, а сразу спросить новый |
 | `--force` | Записать настройку, даже если проверка ключа не прошла |
@@ -141,6 +145,53 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 | `--help` | Показать справку |
 
 </details>
+
+## Другие модели
+
+По умолчанию в списке три модели: **Claude Sonnet 5.5**, **Claude Opus 5.5**
+и **Claude Haiku 5.5**. Если ваш ключ CPA открывает и другие модели Claude,
+их можно добавить в список приложения.
+
+Посмотреть, что доступно вашему ключу:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --list-models
+```
+
+Добавить модель (подпись после `=` необязательна):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --add-model 'claude-opus-4-8=Opus 4.8' --configure-only
+```
+
+Можно добавить несколько моделей сразу:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
+  --add-model 'claude-sonnet-5=Sonnet 5' \
+  --add-model 'claude-fable-5-2=Fable 5.2' \
+  --configure-only
+```
+
+Убрать добавленную модель:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --remove-model claude-opus-4-8 --configure-only
+```
+
+Что важно знать:
+
+- Три модели по умолчанию остаются в списке всегда. Первая модель списка
+  считается моделью по умолчанию — это Sonnet 5.5.
+- Добавленные модели сохраняются в
+  `~/.config/claude-desktop-cpa/models.json`. Обычный запуск установщика их
+  не удаляет.
+- После изменения списка Claude нужно перезапустить. Установщик делает это
+  сам, если не указан `--no-restart`.
+- Модели не-Claude (`gpt-*`, `gemini-*` и другие) технически проходят через
+  CPA, но в Claude Desktop не тестировались: приложение отправляет запросы
+  в формате Anthropic и ожидает поведение Claude. Для повседневной работы
+  надёжнее модели Claude.
 
 ## Как вернуть всё обратно
 
@@ -257,6 +308,13 @@ Claude Desktop умеет работать через сторонний шлю�
 `claude-haiku-5-5`, а также `chatTabEnabled` и `coworkEgressAllowedHosts`.
 Права на файлы — `600`, на каталоги — `700`.
 
+Список моделей можно расширить. `--add-model` сохраняет выбранные модели в
+`~/.config/claude-desktop-cpa/models.json` и добавляет их в
+`inferenceModels` после трёх базовых. Поддерживаются поля Claude Desktop:
+`labelOverride`, `supports1m`, `prefer1m`, `anthropicFamilyTier`,
+`isFamilyDefault`, `behavesAs`, `maxEffort`. Первая модель списка — модель
+по умолчанию.
+
 После первого запуска приложение переносит ключ в связку ключей macOS
 (Keychain) и оставляет в профиле только ссылку на него. В этом случае
 `--check` покажет `key_kind: keychain`.
@@ -280,7 +338,7 @@ bash -n install.sh
 ```
 
 ```bash
-shellcheck -x install.sh tests/test-script.sh
+shellcheck -x install.sh tests/test-script.sh tests/test-models.sh
 ```
 
 ```bash
