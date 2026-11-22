@@ -1,0 +1,71 @@
+name: windows-e2e
+
+# Downloads the real Claude MSIX (~300 MB), verifies it, installs it on a
+# Windows runner and writes the CPA configuration with a fake key.
+on:
+  pull_request:
+    paths:
+      - install.ps1
+      - tests/test-windows.ps1
+      - .github/workflows/windows-e2e.yml
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Verify the official installer
+        run: ./install.ps1 -VerifyDownload
+
+      - name: Install and configure (fake key, no restart)
+        env:
+          CPA_API_KEY: ci-not-a-real-key
+        run: ./install.ps1 -NoRestart -Force
+
+      - name: Check the written configuration
+        run: |
+          $support = Join-Path $env:LOCALAPPDATA 'Claude-3p'
+          $packaged = Join-Path $env:LOCALAPPDATA 'Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p'
+          if (-not (Test-Path (Join-Path $support 'configLibrary\_meta.json'))) { $support = $packaged }
+          $meta = Get-Content -Raw (Join-Path $support 'configLibrary\_meta.json') | ConvertFrom-Json
+          $prof = Get-Content -Raw (Join-Path $support ('configLibrary\' + $meta.appliedId + '.json')) | ConvertFrom-Json
+          $desktop = Get-Content -Raw (Join-Path $support 'claude_desktop_config.json') | ConvertFrom-Json
+          if ($prof.inferenceProvider -ne 'gateway') { throw 'provider is not gateway' }
+          if ($prof.inferenceGatewayBaseUrl -ne 'https://cpa.2brain.pro') { throw 'wrong base url' }
+          if ($desktop.deploymentMode -ne '3p') { throw 'deploymentMode is not 3p' }
+          $pkg = Get-AppxPackage -Name Claude | Where-Object PackageFamilyName -eq 'Claude_pzs8sxrjxfjjc'
+          if (-not $pkg) { throw 'Claude MSIX is not installed' }
+          Write-Host "Installed Claude $($pkg.Version) from $($pkg.InstallLocation); config in $support"
+
+      - name: Check mode (the fake key is expected to fail validation)
+        run: |
+          ./install.ps1 -Check
+          Write-Host "exit code: $LASTEXITCODE"
+          exit 0
+
+      - name: One-command launch through irm (as users run it)
+        if: github.event_name == 'pull_request'
+        env:
+          RAW_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.pull_request.head.sha }}/install.ps1
+        run: |
+          $local = & ./install.ps1 -Help 6>&1 | Out-String
+          $remote = & ([scriptblock]::Create((Invoke-RestMethod $env:RAW_URL))) -Help 6>&1 | Out-String
+          if ($local -ne $remote) { Write-Host $remote; throw 'help text differs when loaded through irm (encoding problem?)' }
+          Write-Host 'irm + scriptblock: OK'
