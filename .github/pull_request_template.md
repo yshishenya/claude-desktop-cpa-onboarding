@@ -7,7 +7,9 @@
 - [ ] `bash tests/test-script.sh`
 - [ ] `shellcheck -x install.sh tests/test-script.sh`
 - [ ] `bash install.sh --dry-run --no-restart` на macOS
-- [ ] Ручная проверка на Mac (опишите, что именно):
+- [ ] `./tests/test-windows.ps1` (Windows PowerShell 5.1 и PowerShell 7)
+- [ ] Проверка `windows-e2e` (если менялся `install.ps1`)
+- [ ] Ручная проверка на Mac или Windows (опишите, что именно):
 
 ## Безопасность
 

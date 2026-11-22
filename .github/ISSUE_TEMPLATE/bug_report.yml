@@ -23,12 +23,23 @@ body:
       label: Что вы ожидали
     validations:
       required: false
-  - type: input
-    id: macos
+  - type: dropdown
+    id: os
     attributes:
-      label: Версия macOS
-      description: Меню Apple → «Об этом Mac».
-      placeholder: macOS 15.1
+      label: Система
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Версия системы
+      description: |
+        Mac: меню Apple → «Об этом Mac».
+        Windows: «Параметры → Система → О системе».
+      placeholder: macOS 15.1 или Windows 11 24H2
     validations:
       required: true
   - type: dropdown
@@ -37,7 +48,8 @@ body:
       label: Процессор
       options:
         - Apple (M1, M2, M3 и новее)
-        - Intel
+        - Intel или AMD (x64)
+        - ARM (Windows)
         - Не знаю
     validations:
       required: true
@@ -46,8 +58,9 @@ body:
     attributes:
       label: Результат проверки
       description: |
-        Выполните в Терминале и вставьте результат:
-        `curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --check`
+        Выполните команду и вставьте результат.
+        Mac (Терминал): `curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --check`
+        Windows (PowerShell): `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -Check`
       render: text
     validations:
       required: false
