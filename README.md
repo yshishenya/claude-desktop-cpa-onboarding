@@ -176,22 +176,29 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 Если модель не от Anthropic, под исходным именем её добавить нельзя: Claude
 Desktop принимает только ID, похожие на Anthropic, и отбрасывает `deepseek-*`,
 `gpt-*`, `gemini-*` и подобные. Администратор CPA публикует такую модель под
-alias с `claude-` в имени — например, `claude-sonnet-4-5-cpa`. После этого
-добавьте alias. Третий элемент задаёт `behavesAs` — лимиты и уровни effort:
+alias с `claude-` или названием семейства (`sonnet`, `haiku`) в имени —
+например, `sonnet-4-5-cpa`. После этого добавьте alias. Третий элемент
+задаёт `behavesAs` — лимиты и уровни effort:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
-  --add-model 'opencode-go/claude-sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' \
+  --add-model 'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' \
+  --add-model 'haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5' \
   --configure-only
 ```
 
-Пример настройки CPA (`plugins.configs.cpa-opencode-go.models`):
+Пример маршрута в CPA (`cpa-key-policy`):
 
 ```yaml
-models:
-  - name: deepseek-v4-pro
-    alias: claude-sonnet-4-5-cpa
+aliases:
+  - alias: sonnet-4-5-cpa
+    targets:
+      - provider: opencode-go
+        target_model: opencode-go/deepseek-v4-pro
 ```
+
+Alias нужно добавить и в список моделей вашего ключа CPA, иначе запрос
+получит `401 Invalid API key`.
 
 Третий элемент попадает в поле `behavesAs`: приложение будет знать, что это
 за модель, какие у неё лимиты и какие уровни effort показывать.
@@ -343,8 +350,8 @@ Claude Desktop умеет работать через сторонний шлю�
 Claude Desktop принимает в `inferenceModels` только ID, похожие на Anthropic,
 и отбрасывает имена с `deepseek`, `gpt`, `gemini` и другими чужими
 названиями. Поэтому не-Claude модель сначала публикуют в CPA под alias с
-`claude-` в имени, например `claude-sonnet-4-5-cpa`, а в профиль добавляют
-уже этот alias.
+`claude-` или названием семейства в имени, например `sonnet-4-5-cpa`, а в
+профиль добавляют уже этот alias.
 
 После первого запуска приложение переносит ключ в связку ключей macOS
 (Keychain) и оставляет в профиле только ссылку на него. В этом случае
