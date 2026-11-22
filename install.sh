@@ -802,6 +802,29 @@ key_fingerprint() {
   printf '%s' "$1" | shasum -a 256 | awk '{print substr($1,1,8)}'
 }
 
+# Removes what a paste can add around a key: terminal escape sequences, other
+# control characters and surrounding whitespace. The inside of the key is kept.
+clean_key() {
+  printf '%s' "${1:-}" \
+    | LC_ALL=C sed -e $'s/\033\\[[0-9;]*[A-Za-z~]//g' \
+    | LC_ALL=C tr -d '\000-\010\013-\037\177' \
+    | LC_ALL=C sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+# Says what was actually received, without showing the key. A typo, a lost
+# character or an invisible or lookalike character shows up when the length and
+# fingerprint are compared with the issued key.
+describe_key() {
+  local k="${1:-}" bytes
+  bytes="$(printf '%s' "$k" | wc -c | tr -d ' ')"
+  warn "Введено символов: ${bytes}, отпечаток: $(key_fingerprint "$k"). Сверьте с выданным ключом."
+  if printf '%s' "$k" | LC_ALL=C grep -q '[^ -~]'; then
+    warn "В ключе есть невидимые знаки или символы не из латиницы (например, русская «с» вместо латинской c). Скопируйте ключ ещё раз."
+  elif [[ "$k" == *[[:space:]]* ]]; then
+    warn "В середине ключа есть пробел. Скопируйте ключ целиком, без переносов."
+  fi
+}
+
 validate_key() {
   local key="$1" hdr body code
   hdr="$(new_tmp_file)"
@@ -811,6 +834,7 @@ validate_key() {
   code="$(curl -sS --max-time 25 -o "$body" -w '%{http_code}' -H @"$hdr" "$BASE_URL/v1/models" 2>/dev/null || echo 000)"
   if [[ "$code" != "200" ]]; then
     warn "CPA /v1/models вернул HTTP $code — ключ не принят."
+    case "$code" in 400|401|403) describe_key "$key" ;; esac
     return 1
   fi
 
@@ -926,6 +950,7 @@ prompt_key() {
   local _
   for _ in 1 2 3; do
     read_secret 'CPA API key: ' KEY || die "Нет терминала для ввода ключа. Передай --key или CPA_API_KEY."
+    KEY="$(clean_key "$KEY")"
     [[ -n "$KEY" ]] || continue
     if validate_key "$KEY"; then
       KEY_SOURCE="interactive"
@@ -1414,6 +1439,11 @@ check_mode() {
 main() {
   parse_args "$@"
   require_env
+
+  # A key copied from a chat or an email often carries an extra space, a line
+  # break or terminal escape codes; clean it before it is used or validated.
+  KEY="$(clean_key "$KEY")"
+  CPA_API_KEY="$(clean_key "${CPA_API_KEY:-}")"
 
   if [[ "$LIST_MODELS" -eq 1 ]]; then
     list_models
