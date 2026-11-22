@@ -58,7 +58,7 @@ DO_UPDATE=1
 DO_CONFIGURE=1
 DO_RESTART=1
 WITH_CHAT=0
-WITH_MAIN_MODELS=0
+WITH_MAIN_MODELS=1
 FORCE=0
 ASSUME_YES=0
 ASK_KEY=0
@@ -262,8 +262,9 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   --no-update          Не обновлять приложение.
   --no-restart         Записать конфиг, но не запускать Claude.
   --with-chat          Показать вкладку Chat (ей нужен вход в claude.ai).
-  --with-main-models   Добавить основные модели CPA: DeepSeek, GPT 6.x,
-                       Gemini 4. Нужны alias в CPA и доступ ключа.
+  --with-main-models   Добавить основные модели CPA (включено по умолчанию).
+  --claude-only        Только три базовые модели Claude, без DeepSeek,
+                       GPT и Gemini.
   --list-models        Показать модели Claude, доступные ключу CPA.
   --add-model SPEC     Добавить модель в список Claude. SPEC: ID,
                        ID=Подпись или ID=Подпись=Claude-модель.
@@ -315,12 +316,13 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   - после изменения списка Claude нужно перезапустить.
 
 Основные модели CPA:
-  - --with-main-models добавляет DeepSeek V4 Pro/Flash, GPT 6.2 Astra/Sol,
+  - по умолчанию добавляются DeepSeek V4 Pro/Flash, GPT 6.2 Astra/Sol,
     GPT-6 Luna и Gemini 4 Argon;
   - alias для них создаются один раз на сервере скриптом
     scripts/sync-cpa-main-models.py (нужен management key);
   - обычному пользователю management key не нужен: установщик только
-    проверяет доступ и записывает alias в профиль Claude.
+    проверяет доступ и записывает alias в профиль Claude;
+  - --claude-only оставляет только три базовые модели Claude.
 
 Источник установки:
   - официальный Homebrew cask claude (ZIP), актуальная версия из
@@ -346,6 +348,7 @@ parse_args() {
       --no-restart) DO_RESTART=0 ;;
       --with-chat) WITH_CHAT=1 ;;
       --with-main-models) WITH_MAIN_MODELS=1 ;;
+      --claude-only) WITH_MAIN_MODELS=0 ;;
       --list-models) LIST_MODELS=1; DO_INSTALL=0; DO_UPDATE=0; DO_CONFIGURE=0; DO_RESTART=0 ;;
       --add-model) shift; [[ $# -gt 0 ]] || die "--add-model требует значение"; ADD_MODELS+=("$1") ;;
       --add-model=*) ADD_MODELS+=("${1#*=}") ;;
@@ -895,6 +898,7 @@ PY
 # Add only the main models that the configured CPA key can actually use.
 apply_main_models() {
   local -a good=()
+  local -a skipped=()
   local spec alias
   log "Проверяю основные модели CPA..."
   for spec in "${MAIN_MODEL_SPECS[@]}"; do
@@ -903,12 +907,16 @@ apply_main_models() {
       good+=("$spec")
       log "  $alias: OK"
     else
-      warn "  $alias: нет доступа у ключа CPA, пропускаю"
+      skipped+=("$alias")
     fi
   done
   if [[ ${#good[@]} -eq 0 ]]; then
-    warn "Основные модели не добавлены: проверь alias в CPA и доступ ключа."
+    warn "Основные модели CPA недоступны этому ключу; добавляю только Claude."
+    warn "Если нужны только Claude-модели, используй --claude-only."
     return 0
+  fi
+  if [[ ${#skipped[@]} -gt 0 ]]; then
+    warn "Пропущены модели без доступа: ${skipped[*]}"
   fi
   update_models_file add "${good[@]}"
 }

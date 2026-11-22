@@ -68,7 +68,8 @@ Anthropic, настроит его и запустит. Обычно это за
 1. В конце Терминал напишет **«Готово.»**.
 2. Откроется приложение **Claude**.
 3. Перейдите на вкладку **Code**. В списке моделей должны быть
-   Claude Sonnet 5.5, Claude Opus 5.5 и Claude Haiku 5.5.
+   Claude Sonnet 5.5, Claude Opus 5.5 и Claude Haiku 5.5. Если на сервере
+   настроены основные модели CPA, рядом появятся DeepSeek, GPT и Gemini.
 
 При **первом** открытии вкладки Code приложение докачивает свои рабочие
 компоненты. Это может занять несколько минут. Это не вход в аккаунт и не
@@ -134,7 +135,8 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 | `--no-update` | Не обновлять приложение, если оно уже стоит |
 | `--no-restart` | Записать настройку, но не запускать Claude |
 | `--with-chat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
-| `--with-main-models` | Добавить основные модели CPA: DeepSeek, GPT 6.x, Gemini 4 |
+| `--with-main-models` | Добавить основные модели CPA (включено по умолчанию) |
+| `--claude-only` | Только три базовые модели Claude, без DeepSeek, GPT и Gemini |
 | `--list-models` | Показать модели Claude, доступные вашему ключу CPA |
 | `--add-model SPEC` | Добавить модель в список Claude: `ID`, `ID=Подпись` или `ID=Подпись=Claude-модель` |
 | `--remove-model ID` | Убрать модель, добавленную через `--add-model` |
@@ -150,9 +152,11 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 
 ## Другие модели
 
-По умолчанию в списке три модели: **Claude Sonnet 5.5**, **Claude Opus 5.5**
-и **Claude Haiku 5.5**. Если ваш ключ CPA открывает и другие модели Claude,
-их можно добавить в список приложения.
+Три базовые модели — **Claude Sonnet 5.5**, **Claude Opus 5.5** и
+**Claude Haiku 5.5** — остаются в списке всегда. Если ваш ключ CPA открывает
+другие модели Claude, их можно добавить вручную. Основные модели CPA
+(DeepSeek, GPT, Gemini) установщик добавляет по умолчанию, если для них
+настроены alias и доступ ключа.
 
 Посмотреть, что доступно вашему ключу:
 
@@ -213,7 +217,7 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 
 Что важно знать:
 
-- Три модели по умолчанию остаются в списке всегда. Первая модель списка
+- Три базовые модели остаются в списке всегда. Первая модель списка
   считается моделью по умолчанию — это Sonnet 5.5.
 - Добавленные модели сохраняются в
   `~/.config/claude-desktop-cpa/models.json`. Обычный запуск установщика их
@@ -229,8 +233,9 @@ curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboa
 
 ## Основные модели CPA
 
-Это короткий набор моделей, который установщик умеет добавлять одной
-командой:
+Это короткий набор моделей, который установщик добавляет **по умолчанию**.
+Если серверные alias не настроены или у ключа нет к ним доступа, установщик
+пропустит их и оставит только Claude-модели.
 
 | Подпись в Claude | Alias | Модель в CPA |
 |---|---|---|
@@ -277,21 +282,29 @@ python3 scripts/sync-cpa-main-models.py --all-keys --apply
 
 ### На каждом Mac
 
-Пользователю management key не нужен. Установщик проверяет, какие из
-основных alias доступны его ключу, и добавляет только их:
+Пользователю management key не нужен. Установщик по умолчанию проверяет,
+какие из основных alias доступны его ключу, и добавляет только их:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --with-main-models
+curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash
 ```
 
 Или из клонированного репозитория:
 
 ```bash
-./install.sh --with-main-models
+./install.sh
+```
+
+Если нужны только три базовые модели Claude:
+
+```bash
+./install.sh --claude-only
 ```
 
 Модели, к которым у ключа нет доступа, пропускаются с предупреждением.
-Повторный запуск без `--with-main-models` уже добавленные модели не удаляет.
+Повторный запуск уже добавленные модели не удаляет; `--claude-only` тоже не
+удаляет их, а только не добавляет новые. Для удаления используйте
+`--remove-model`.
 
 ## Как вернуть всё обратно
 

@@ -11,7 +11,7 @@ bash -n "$installer"
 
 # --- help -----------------------------------------------------------------
 help_text="$(bash "$installer" --help)"
-for needle in --check --dry-run --configure-only --with-chat --with-main-models --yes --ask-key --base-url --dmg-url --list-models --add-model --remove-model CPA_API_KEY "bash -s --"; do
+for needle in --check --dry-run --configure-only --with-chat --with-main-models --claude-only --yes --ask-key --base-url --dmg-url --list-models --add-model --remove-model CPA_API_KEY "bash -s --"; do
   grep -q -- "$needle" <<<"$help_text" || fail "help does not mention $needle"
 done
 
@@ -23,6 +23,7 @@ grep -q 'deploymentMode' "$installer"
 grep -q 'inferenceGatewayBaseUrl' "$installer"
 grep -q 'MAIN_MODEL_SPECS' "$installer"
 grep -q 'sonnet-4-argon-cpa' "$installer"
+grep -q '^WITH_MAIN_MODELS=1$' "$installer" || fail "main models must be enabled by default"
 python3 - "$repo_dir/scripts/sync-cpa-main-models.py" <<'PY'
 import pathlib, sys
 path = pathlib.Path(sys.argv[1])
