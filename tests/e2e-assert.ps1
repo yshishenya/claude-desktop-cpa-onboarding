@@ -31,11 +31,16 @@ if ($prof.inferenceProvider -ne 'gateway') { throw 'provider is not gateway' }
 if ($prof.inferenceGatewayBaseUrl -ne 'http://127.0.0.1:8787') { throw 'wrong gateway url' }
 if ($desktop.deploymentMode -ne '3p') { throw 'deploymentMode is not 3p' }
 
-# What the installer asked the fake CPA, and that every request used the right key.
+# What reached the fake CPA. The installer identifies itself with its own
+# User-Agent; every request it sends must carry the right key. Requests from
+# the app itself are reported, not judged: they show how Claude authenticates.
 $entries = @(Get-Content $MockLog | ForEach-Object { $_ | ConvertFrom-Json })
-$entries | Group-Object method, path, model, key_ok | ForEach-Object { Write-Host ('  {0}  x{1}' -f $_.Name, $_.Count) }
-if (@($entries | Where-Object { -not $_.key_ok }).Count -gt 0) { throw 'a request reached the fake CPA with a wrong key' }
-$probed = @($entries | Where-Object { $_.method -eq 'POST' } | ForEach-Object { $_.model })
+$entries | Group-Object method, path, model, key_ok, auth, key_len, ua | ForEach-Object { Write-Host ('  {0}  x{1}' -f $_.Name, $_.Count) }
+$fromInstaller = @($entries | Where-Object { $_.ua -like 'claude-desktop-cpa*' })
+if (@($fromInstaller | Where-Object { -not $_.key_ok }).Count -gt 0) { throw 'the installer sent a request with a wrong key' }
+$fromApp = @($entries | Where-Object { $_.ua -notlike 'claude-desktop-cpa*' })
+Write-Host "requests from the installer: $($fromInstaller.Count); from other clients (the app): $($fromApp.Count)"
+$probed = @($fromInstaller | Where-Object { $_.method -eq 'POST' } | ForEach-Object { $_.model })
 foreach ($alias in 'sonnet-4-5-cpa', 'haiku-4-5-cpa', 'opus-6-2-astra-cpa', 'sonnet-6-2-sol-cpa', 'haiku-6-luna-cpa', 'sonnet-4-argon-cpa', 'claude-haiku-5-5') {
     if ($probed -notcontains $alias) { throw "the installer never probed $alias" }
 }

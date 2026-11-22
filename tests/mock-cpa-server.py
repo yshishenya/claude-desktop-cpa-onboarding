@@ -4,9 +4,10 @@
 It listens on 127.0.0.1 only, accepts one made-up key and never talks to the
 network. Usage: mock-cpa-server.py PORT LOGFILE
 
-Requests are appended to LOGFILE as JSON lines. Only the HTTP method, path,
-the requested model and whether the key was the expected one are recorded;
-the key itself is never written.
+Requests are appended to LOGFILE as JSON lines: the HTTP method, path, the
+requested model, whether the x-api-key header held the expected key, which
+auth headers were present, the key length and the first 30 characters of the
+User-Agent. The key itself is never written.
 """
 import json
 import sys
@@ -23,8 +24,14 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "mock-cpa"
 
     def _record(self, model=""):
-        ok = self.headers.get("x-api-key") == KEY
-        entry = {"method": self.command, "path": self.path, "model": model, "key_ok": ok}
+        sent = self.headers.get("x-api-key")
+        ok = sent == KEY
+        auth = [h for h in ("x-api-key", "authorization") if self.headers.get(h) is not None]
+        entry = {
+            "method": self.command, "path": self.path, "model": model, "key_ok": ok,
+            "auth": "+".join(auth) or "none", "key_len": len(sent or ""),
+            "ua": (self.headers.get("user-agent") or "")[:30],
+        }
         with open(LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
         return ok
