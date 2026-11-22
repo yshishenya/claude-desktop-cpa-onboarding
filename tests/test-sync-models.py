@@ -64,8 +64,8 @@ STATE = {
         {
             "id": "k2", "name": "other-user", "enabled": True, "rpm": 0,
             "daily_limit_usd": 0, "weekly_limit_usd": 0, "allow_models_endpoint": True,
-            "models": [],
-            "aliases": [],
+            "models": [entry("sonnet-6-2-sol-cpa", "gpt-6.2-sol")],
+            "aliases": [{"alias": "sonnet-6-2-sol-cpa"}],
         },
     ],
 }
@@ -236,7 +236,51 @@ def main():
     if [c for c in CALLS if c[0] in ("POST", "PATCH")] != patches:
         fail("the second run sent writes")
 
-    # 4. A wrong token is refused and nothing is written.
+    # 4. Revoking old aliases from one key.
+    legacy = "sonnet-6-2-sol-cpa"
+    before_revoke = copy.deepcopy(STATE)
+    writes = len([c for c in CALLS if c[0] in ("POST", "PATCH")])
+
+    code, out = run(url, "--key-name", "[P4]a.duduts", "--revoke-alias", "claude-opus-5-5", "--apply", backup=backup)
+    if code == 0 or "управляемый набор" not in out:
+        fail("revoking an alias of the managed set must be refused: " + out)
+    code, out = run(url, "--all-keys", "--revoke-alias", legacy, "--apply", backup=backup)
+    if code == 0:
+        fail("revoking without --key-name (with --all-keys) must be refused")
+    code, out = run(url, "--revoke-alias", legacy, "--apply", backup=backup)
+    if code == 0:
+        fail("revoking without any key must be refused")
+    code, out = run(url, "--key-name", "[P4]a.duduts", "--revoke-alias", legacy, backup=backup)
+    if code != 0 or "убрать " + legacy not in out:
+        fail("the revoke plan failed: " + out)
+    if STATE != before_revoke or len([c for c in CALLS if c[0] in ("POST", "PATCH")]) != writes:
+        fail("a refused or plan-only revoke changed the server")
+
+    snapshots_before = len(os.listdir(backup))
+    code, out = run(url, "--key-name", "[P4]a.duduts", "--revoke-alias", legacy, "--apply", backup=backup)
+    if code != 0:
+        fail("the revoke failed: " + out)
+    k1 = next(k for k in STATE["keys"] if k["id"] == "k1")
+    k2 = next(k for k in STATE["keys"] if k["id"] == "k2")
+    if legacy in names(k1["models"]) or legacy in names(k1["aliases"]):
+        fail("the alias is still on the key (models or aliases)")
+    old_k1 = next(k for k in before_revoke["keys"] if k["id"] == "k1")
+    if set(names(k1["models"])) != set(names(old_k1["models"])) - {legacy}:
+        fail("revoke changed other models of the key")
+    if set(names(k1["aliases"])) != set(names(k1["models"])):
+        fail("models and aliases of the key are not consistent after the revoke")
+    if k2 != next(k for k in before_revoke["keys"] if k["id"] == "k2"):
+        fail("revoke changed another key")
+    if STATE["aliases"] != before_revoke["aliases"]:
+        fail("revoke changed global aliases")
+    if len(os.listdir(backup)) != snapshots_before + 1:
+        fail("the revoke must save its own snapshot")
+    after_revoke = copy.deepcopy(STATE)
+    code, out = run(url, "--key-name", "[P4]a.duduts", "--revoke-alias", legacy, "--apply", backup=backup)
+    if code != 0 or STATE != after_revoke:
+        fail("a second revoke must change nothing: " + out)
+
+    # 5. A wrong token is refused and nothing is written.
     env = {**os.environ, "CPA_MANAGEMENT_KEY": "wrong-token"}
     done = subprocess.run([sys.executable, "-I", SCRIPT, "--url", url, "--key-name", "x"],
                           capture_output=True, text=True, env=env, timeout=60)
