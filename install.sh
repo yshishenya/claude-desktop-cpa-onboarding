@@ -178,9 +178,9 @@ if mode == "add":
         if bad:
             raise SystemExit(
                 "Claude Desktop отбросит «%s»: в имени есть «%s». "
-                "Опубликуйте модель в CPA под alias с «claude-» в имени, "
-                "например claude-sonnet-4-5-cpa, и добавьте этот alias."
-                % (name, bad.group(0))
+                "Опубликуйте модель в CPA под alias с «claude-» или названием "
+                "семейства (sonnet, haiku) в имени, например sonnet-4-5-cpa, "
+                "и добавьте этот alias." % (name, bad.group(0))
             )
         entry = {
             "name": name,
@@ -294,9 +294,10 @@ claude-desktop-cpa — установка/обновление Claude Desktop и
   - --add-model добавляет модель в inferenceModels и сохраняет выбор в
     ~/.config/claude-desktop-cpa/models.json, поэтому повторный запуск
     установщика его не потеряет;
-  - для моделей не от Anthropic нужен alias с «claude-» в имени,
-    опубликованный в CPA; третий элемент задает Claude-модель, чьи
-    лимиты и уровни effort использовать: ID=Подпись=claude-sonnet-5;
+  - для моделей не от Anthropic нужен alias с «claude-» или названием
+    семейства (sonnet, haiku) в имени, опубликованный в CPA; третий
+    элемент задает Claude-модель, чьи лимиты и уровни effort использовать:
+    ID=Подпись=claude-sonnet-5;
   - tier (sonnet/opus/haiku/fable/mythos) определяется по ID модели;
   - после изменения списка Claude нужно перезапустить.
 
