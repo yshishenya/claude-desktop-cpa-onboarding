@@ -39,7 +39,7 @@ jobs:
         env:
           CPA_API_KEY: ci-not-a-real-key
         run: |
-          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -NoRestart -Force
+          & ([scriptblock]::Create((Get-Content -Raw -Encoding UTF8 ./install.ps1))) -NoRestart -Force -ClaudeOnly
 
       - name: Check the written configuration
         run: |

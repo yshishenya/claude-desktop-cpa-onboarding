@@ -51,7 +51,7 @@ try {
     Assert-True 'install.ps1 has no BOM (a BOM breaks `irm | iex`)' (-not ($raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF))
 
     $helpText = (& { Show-CpaUsage } 6>&1 | Out-String)
-    foreach ($needle in @('-Check', '-DryRun', '-ConfigureOnly', '-AskKey', '-Yes', '-BaseUrl', 'CPA_API_KEY', 'irm ', 'scriptblock')) {
+    foreach ($needle in @('-Check', '-DryRun', '-ConfigureOnly', '-AskKey', '-Yes', '-BaseUrl', '-AddModel', '-RemoveModel', '-ListModels', '-ClaudeOnly', 'CPA_API_KEY', 'irm ', 'scriptblock')) {
         Assert-True ("help mentions $needle") ($helpText.Contains($needle))
     }
 
@@ -197,6 +197,101 @@ ManifestType: installer
     Assert-Equal 'config state: base matches' $state.base_matches 'yes'
     Assert-Equal 'config state: key kind' $state.key_kind 'direct'
     Assert-Equal 'config state: deploymentMode' $state.deploymentMode '3p'
+
+    # --- models --------------------------------------------------------------------
+    Assert-True 'main models are on by default' ([bool]$script:Opt.MainModels)
+    $modelFile = Get-CpaModelFile
+    Assert-Equal 'models file lives under %LOCALAPPDATA%' $modelFile (Join-Path $env:LOCALAPPDATA 'claude-desktop-cpa\models.json')
+
+    # Parity with install.sh: the same main models and the same vendor filter.
+    $sh = [System.IO.File]::ReadAllText((Join-Path $repo 'install.sh'), [System.Text.Encoding]::UTF8)
+    $specBlock = ($sh -split 'MAIN_MODEL_SPECS=\(')[1].Split(')')[0]
+    $shSpecs = @([regex]::Matches($specBlock, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+    $psSpecs = @($script:CpaConst.MainModels | ForEach-Object { '{0}={1}={2}' -f $_.name, $_.label, $_.behavesAs })
+    Assert-True 'install.sh lists main models' ($shSpecs.Count -ge 1)
+    Assert-Equal 'main models match install.sh' ($psSpecs -join '|') ($shSpecs -join '|')
+    $regexBlock = ($sh -split 'NON_ANTHROPIC = re\.compile\(')[1].Split([string[]]@('re.I,'), [StringSplitOptions]::None)[0]
+    $shPattern = -join @([regex]::Matches($regexBlock, 'r"([^"]*)"') | ForEach-Object { $_.Groups[1].Value })
+    Assert-Equal 'vendor-name filter matches install.sh' $script:CpaConst.NonAnthropicRegex.ToString() $shPattern
+
+    # Claude Desktop drops names with another vendor's keyword, so they are rejected.
+    $message = ''
+    try { Update-CpaModelFile -Mode add -Spec 'opencode-go/deepseek-v4-pro=DeepSeek V4 Pro' } catch { $message = $_.Exception.Message }
+    Assert-True 'a non-Anthropic model ID is rejected' ($message -match 'deepseek')
+    Assert-True 'a rejected model is not written' (-not (Test-Path -LiteralPath $modelFile))
+
+    Update-CpaModelFile -Mode add -Spec 'claude-opus-4-8=Opus 4.8', 'acme-sonnet-cpa=Acme Sonnet', 'opencode-go/claude-sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' 6>$null
+    $saved = @(Read-CpaModelFile)
+    Assert-Equal 'saved model count' $saved.Count 3
+    Assert-Equal 'tier from the model ID' $saved[0]['anthropicFamilyTier'] 'opus'
+    Assert-Equal 'label is kept' $saved[0]['labelOverride'] 'Opus 4.8'
+    Assert-Equal 'tier from a family name inside the ID' $saved[1]['anthropicFamilyTier'] 'sonnet'
+    Assert-Equal 'behavesAs is saved' $saved[2]['behavesAs'] 'claude-sonnet-5'
+    Assert-Equal 'tier follows behavesAs' $saved[2]['anthropicFamilyTier'] 'sonnet'
+    Assert-True 'models.json is a JSON array' ((Get-Content -Raw -LiteralPath $modelFile).TrimStart().StartsWith('['))
+
+    Update-CpaModelFile -Mode add -Spec 'claude-opus-4-8=Opus 4.8 (CPA)' 6>$null
+    $saved = @(Read-CpaModelFile)
+    Assert-Equal 'the same ID is updated in place' $saved.Count 3
+    Assert-Equal 'updated label' $saved[0]['labelOverride'] 'Opus 4.8 (CPA)'
+
+    # The config writer keeps the built-in models first and appends extras.
+    $script:CpaKey = 'test-key-3'
+    Write-CpaConfig 6>$null
+    $profileData = Get-Content -Raw -LiteralPath $profilePath | ConvertFrom-Json
+    Assert-Equal 'extras follow the three built-ins' ((@($profileData.inferenceModels) | ForEach-Object { $_.name }) -join ',') 'claude-sonnet-5-5,claude-opus-5-5,claude-haiku-5-5,claude-opus-4-8,acme-sonnet-cpa,opencode-go/claude-sonnet-4-5-cpa'
+
+    # A hand-edited models.json cannot inject unknown keys, duplicates or nameless entries.
+    Write-TestFile $modelFile '[{"name":"claude-haiku-x","evil":"1","anthropicFamilyTier":"bogus"},{"name":"claude-sonnet-5-5"},{"nope":1},"text"]'
+    Write-CpaConfig 6>$null
+    $profileData = Get-Content -Raw -LiteralPath $profilePath | ConvertFrom-Json
+    $custom = @($profileData.inferenceModels) | Where-Object { $_.name -eq 'claude-haiku-x' }
+    Assert-Equal 'only one valid extra model is written' (@($profileData.inferenceModels).Count) 4
+    Assert-True 'unknown keys are dropped' (-not $custom.PSObject.Properties['evil'])
+    Assert-Equal 'an invalid tier is recomputed' $custom.anthropicFamilyTier 'haiku'
+
+    Update-CpaModelFile -Mode add -Spec 'a-sonnet=A', 'b-opus=B' 6>$null
+    Update-CpaModelFile -Mode remove -Spec 'a-sonnet' 6>$null
+    Assert-Equal 'remove keeps the other models' ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ',') 'claude-haiku-x,b-opus'
+    Update-CpaModelFile -Mode remove -Spec 'claude-haiku-x', 'b-opus' 6>$null
+    Assert-Equal 'removing everything leaves an empty JSON array' ((Get-Content -Raw -LiteralPath $modelFile).Trim()) '[]'
+
+    # Main models and -ListModels, with the HTTP layer stubbed.
+    $script:stubStatus = @{}
+    function Invoke-CpaHttp {
+        param([string]$Method = 'GET', [string]$Url, [hashtable]$Headers = @{}, [string]$Body = $null, [int]$TimeoutSec = 25)
+        $null = $Method, $Headers, $TimeoutSec
+        if ($Url.EndsWith('/v1/models')) {
+            return @{ Status = 200; Body = '{"data":[{"id":"claude-sonnet-5-5"},{"id":"Claude-Opus-4-8"},{"id":"gpt-x"}]}' }
+        }
+        $model = ''
+        if ($Body) { $model = [string](($Body | ConvertFrom-Json).model) }
+        $code = 401
+        if ($script:stubStatus.ContainsKey($model)) { $code = $script:stubStatus[$model] }
+        $reply = '{"type":"error"}'
+        if ($code -eq 200) { $reply = '{"type":"message"}' }
+        return @{ Status = $code; Body = $reply }
+    }
+    $script:CpaKey = 'new-key'
+    Remove-Item -LiteralPath $modelFile -Force
+    $script:stubStatus = @{ 'sonnet-4-5-cpa' = 200; 'haiku-4-5-cpa' = 429; 'opus-6-2-astra-cpa' = 503; 'sonnet-6-2-sol-cpa' = 401 }
+    Add-CpaMainModel 6>$null
+    $added = @(Read-CpaModelFile)
+    Assert-Equal 'only reachable main models are added (429 and 5xx count as reachable)' (($added | ForEach-Object { $_['name'] }) -join ',') 'sonnet-4-5-cpa,haiku-4-5-cpa,opus-6-2-astra-cpa'
+    Assert-Equal 'main model label' $added[0]['labelOverride'] 'DeepSeek V4 Pro'
+    Assert-Equal 'main model behavesAs' $added[0]['behavesAs'] 'claude-sonnet-5'
+
+    Remove-Item -LiteralPath $modelFile -Force
+    $script:stubStatus = @{}
+    Add-CpaMainModel 6>$null
+    Assert-True 'nothing is written when no main model is reachable' (-not (Test-Path -LiteralPath $modelFile))
+
+    $env:CPA_API_KEY = 'new-key'
+    $script:Opt.Key = ''
+    $listing = (Show-CpaModelList 6>&1 | Out-String)
+    $env:CPA_API_KEY = $null
+    Assert-True '-ListModels shows Claude models' ($listing.Contains('claude-sonnet-5-5') -and $listing.Contains('Claude-Opus-4-8'))
+    Assert-True '-ListModels counts the other models' ($listing.Contains('Прочие модели: 1'))
 } finally {
     $env:USERPROFILE = $realProfile
     $env:LOCALAPPDATA = $realLocal

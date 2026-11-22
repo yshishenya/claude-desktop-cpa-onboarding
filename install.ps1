@@ -38,11 +38,25 @@ param(
     [switch]$Force,
     [switch]$Yes,
     [switch]$AskKey,
+    [switch]$WithMainModels,
+    [switch]$ClaudeOnly,
+    [switch]$ListModels,
     [switch]$VerifyDownload,
     [switch]$Help,
+    [string[]]$AddModel = @(),
+    [string[]]$RemoveModel = @(),
     [string]$Key = '',
     [string]$BaseUrl = 'https://cpa.2brain.pro'
 )
+
+# Claude Desktop silently drops inferenceModels whose names contain another
+# vendor's name. Keep in sync with NON_ANTHROPIC in install.sh (a test checks it).
+$script:CpaNonAnthropicPattern = 'ark-code|astron|command-r|deepseek|doubao|gemini|gemma|glm|gpt|grok|' +
+    'hermes|hy3|kimi|lfm|\bling\b|llama|longcat|mimo|minimax|mistral|' +
+    'mixtral|moonshot|nemotron|openai|phi-|qianfan|qwen|tc-code|\bunic\b|' +
+    'yi-|stepfun|step-3|seed-|bytedance|hunyuan|granite|amazon\.nova|nova-|' +
+    'devstral|ministral|ernie|codex|arcee|trinity|abab|phi\d|\bk2\.|\bm2\.|' +
+    'jamba|arctic|solar|mercury|zamba|kat-coder|\bds-|dpsk/'
 
 $script:CpaConst = @{
     PackageName   = 'Claude'
@@ -54,6 +68,19 @@ $script:CpaConst = @{
         @{ name = 'claude-sonnet-5-5'; label = 'Claude Sonnet 5.5'; tier = 'sonnet' },
         @{ name = 'claude-opus-5-5';   label = 'Claude Opus 5.5';   tier = 'opus' },
         @{ name = 'claude-haiku-5-5';  label = 'Claude Haiku 5.5';  tier = 'haiku' }
+    )
+    ModelTiers    = @('fable', 'mythos', 'opus', 'haiku', 'sonnet')
+    ModelKeys     = @('name', 'labelOverride', 'supports1m', 'prefer1m', 'anthropicFamilyTier', 'isFamilyDefault', 'behavesAs', 'maxEffort')
+    NonAnthropicRegex = [regex]::new($script:CpaNonAnthropicPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    # Main non-Claude models. Keep in sync with MAIN_MODEL_SPECS in install.sh
+    # and scripts/sync-cpa-main-models.py (a test checks install.sh).
+    MainModels    = @(
+        @{ name = 'sonnet-4-5-cpa';      label = 'DeepSeek V4 Pro';     behavesAs = 'claude-sonnet-5' },
+        @{ name = 'haiku-4-5-cpa';       label = 'DeepSeek V4.1 Flash'; behavesAs = 'claude-haiku-5-5' },
+        @{ name = 'opus-6-2-astra-cpa';  label = 'GPT 6.2 Astra';       behavesAs = 'claude-opus-5-5' },
+        @{ name = 'sonnet-6-2-sol-cpa';  label = 'GPT 6.2 Sol';         behavesAs = 'claude-sonnet-5' },
+        @{ name = 'haiku-6-luna-cpa';    label = 'GPT-6 Luna';          behavesAs = 'claude-haiku-5-5' },
+        @{ name = 'sonnet-4-argon-cpa';  label = 'Gemini 4 Argon';      behavesAs = 'claude-sonnet-5' }
     )
     CaskUrl       = 'https://formulae.brew.sh/api/cask/claude.json'
     WingetRaw     = 'https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/a/Anthropic/Claude'
@@ -71,6 +98,10 @@ $script:Opt = @{
     Force          = [bool]$Force
     Yes            = [bool]$Yes
     AskKey         = [bool]$AskKey
+    MainModels     = $(if ($WithMainModels) { $true } else { -not $ClaudeOnly })
+    ListModels     = [bool]$ListModels
+    AddModel       = @($AddModel | Where-Object { $_ })
+    RemoveModel    = @($RemoveModel | Where-Object { $_ })
     VerifyDownload = [bool]$VerifyDownload
     Help           = [bool]$Help
     Key            = [string]$Key
@@ -117,6 +148,15 @@ claude-desktop-cpa — установка/обновление Claude Desktop н
   -NoUpdate        Не обновлять приложение.
   -NoRestart       Записать настройку, но не запускать Claude.
   -WithChat        Показать вкладку Chat (ей нужен вход в claude.ai).
+  -WithMainModels  Добавить основные модели CPA (включено по умолчанию).
+  -ClaudeOnly      Не добавлять основные модели CPA (DeepSeek, GPT, Gemini).
+                   Модели, добавленные раньше, остаются в списке; чтобы
+                   убрать их, используйте -RemoveModel.
+  -ListModels      Показать модели Claude, доступные ключу CPA.
+  -AddModel SPEC   Добавить модель в список Claude. SPEC: ID, ID=Подпись
+                   или ID=Подпись=Claude-модель. Можно несколько через запятую.
+                   Пример: -AddModel 'claude-opus-4-8=Opus 4.8'
+  -RemoveModel ID  Убрать модель, добавленную через -AddModel.
   -Yes             Не задавать вопросов (если ключ уже найден).
   -AskKey          Не искать сохранённый ключ, а спросить новый
                    (например, после замены или отзыва ключа).
@@ -138,6 +178,21 @@ claude-desktop-cpa — установка/обновление Claude Desktop н
   6. ввод по запросу
 Ключи для других сервисов (например, прямые ключи Anthropic или OpenAI)
 не используются и никуда не отправляются.
+
+Список моделей:
+  - по умолчанию: claude-sonnet-5-5, claude-opus-5-5, claude-haiku-5-5;
+  - -AddModel добавляет модель в inferenceModels и сохраняет выбор в
+    %LOCALAPPDATA%\claude-desktop-cpa\models.json, поэтому повторный запуск
+    установщика его не потеряет;
+  - для моделей не от Anthropic нужен alias с «claude-» или названием
+    семейства (sonnet, haiku) в имени, опубликованный в CPA; третий элемент
+    задаёт Claude-модель, чьи лимиты и уровни effort использовать:
+    ID=Подпись=claude-sonnet-5;
+  - по умолчанию добавляются основные модели CPA (DeepSeek V4 Pro/Flash,
+    GPT 6.2 Astra/Sol, GPT-6 Luna, Gemini 4 Argon), но только те, к которым
+    есть доступ у ключа; alias для них администратор создаёт один раз на
+    сервере скриптом scripts/sync-cpa-main-models.py;
+  - после изменения списка Claude нужно перезапустить.
 
 Что настраивается:
   %LOCALAPPDATA%\Claude-3p\configLibrary\<uuid>.json
@@ -800,6 +855,160 @@ function Resolve-CpaKey {
     return $true
 }
 
+# --- models --------------------------------------------------------------------------
+
+# Extra models are stored outside the 3P profile, because the profile is
+# rewritten on every run. Only model IDs and labels live here; keys never do.
+function Get-CpaModelFile {
+    return (Join-Path $env:LOCALAPPDATA 'claude-desktop-cpa\models.json')
+}
+
+function Get-CpaModelTier {
+    param([string]$Name)
+    $low = $Name.ToLowerInvariant()
+    foreach ($tier in $script:CpaConst.ModelTiers) {
+        if ($low.Contains($tier)) { return $tier }
+    }
+    return 'sonnet'
+}
+
+# Returns the saved extra models as ordered hashtables with known keys only.
+function Read-CpaModelFile {
+    $result = New-Object System.Collections.ArrayList
+    foreach ($entry in @(Read-CpaJson (Get-CpaModelFile))) {
+        if ($null -eq $entry) { continue }
+        $name = $entry.PSObject.Properties['name']
+        if (-not $name -or $name.Value -isnot [string] -or -not $name.Value.Trim()) { continue }
+        $item = [ordered]@{}
+        foreach ($key in $script:CpaConst.ModelKeys) {
+            $prop = $entry.PSObject.Properties[$key]
+            if ($prop) { $item[$key] = $prop.Value }
+        }
+        $null = $result.Add($item)
+    }
+    return $result.ToArray()
+}
+
+function Get-CpaModelSummary {
+    return ((@(Read-CpaModelFile) | ForEach-Object { $_['name'] }) -join ', ')
+}
+
+# Adds or removes models in the saved list. A spec is ID, ID=Label or
+# ID=Label=ClaudeModel (the Claude model whose limits and effort levels apply).
+function Update-CpaModelFile {
+    param(
+        [ValidateSet('add', 'remove')][string]$Mode,
+        [string[]]$Spec
+    )
+    if (-not $Spec -or $Spec.Count -eq 0) { return }
+    $path = Get-CpaModelFile
+    $data = New-Object System.Collections.ArrayList
+    foreach ($item in @(Read-CpaModelFile)) { $null = $data.Add($item) }
+
+    if ($Mode -eq 'add') {
+        foreach ($raw in $Spec) {
+            $parts = $raw.Split([char[]]'=', 3)
+            $name = $parts[0].Trim()
+            $label = ''
+            if ($parts.Count -gt 1) { $label = $parts[1].Trim() }
+            $behaves = ''
+            if ($parts.Count -gt 2) { $behaves = $parts[2].Trim() }
+            if (-not $name) { Stop-Cpa 'пустой ID модели' }
+            $bad = $script:CpaConst.NonAnthropicRegex.Match($name)
+            if ($bad.Success) {
+                Stop-Cpa ('Claude Desktop отбросит «{0}»: в имени есть «{1}». Опубликуйте модель в CPA под alias с «claude-» или названием семейства (sonnet, haiku) в имени, например sonnet-4-5-cpa, и добавьте этот alias.' -f $name, $bad.Value)
+            }
+            if (-not $label) { $label = $name }
+            $tierSource = $name
+            if ($behaves) { $tierSource = $behaves }
+            $entry = [ordered]@{
+                name                = $name
+                supports1m          = $false
+                labelOverride       = $label
+                anthropicFamilyTier = (Get-CpaModelTier $tierSource)
+            }
+            # Lets Claude Desktop apply Claude's limits and effort levels to an
+            # alias it cannot identify, such as a DeepSeek gateway ID.
+            if ($behaves) { $entry['behavesAs'] = $behaves }
+            $index = -1
+            for ($i = 0; $i -lt $data.Count; $i++) {
+                if ($data[$i]['name'] -ceq $name) { $index = $i; break }
+            }
+            if ($index -ge 0) { $data[$index] = $entry } else { $null = $data.Add($entry) }
+            Write-CpaLog ('добавлена модель: ' + $name)
+        }
+    } else {
+        $removing = @($Spec | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $before = $data.Count
+        for ($i = $data.Count - 1; $i -ge 0; $i--) {
+            if ($removing -ccontains $data[$i]['name']) { $data.RemoveAt($i) }
+        }
+        Write-CpaLog ('удалено моделей: ' + ($before - $data.Count))
+    }
+
+    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force
+    Write-CpaJsonFile $path ([object[]]$data.ToArray())
+}
+
+# One cheap request to see whether the current CPA key can use an alias.
+function Test-CpaModelAccess {
+    param([string]$Model)
+    $headers = @{ 'x-api-key' = $script:CpaKey; 'anthropic-version' = '2023-06-01' }
+    $body = ConvertTo-Json -Compress -InputObject ([ordered]@{
+            model      = $Model
+            max_tokens = 16
+            messages   = @(, [ordered]@{ role = 'user'; content = 'ping' })
+        })
+    $r = Invoke-CpaHttp -Method 'POST' -Url ($script:Opt.BaseUrl + '/v1/messages') -Headers $headers -Body $body -TimeoutSec 45
+    if ($r.Status -eq 200) {
+        try { return ((($r.Body | ConvertFrom-Json).type) -eq 'message') } catch { return $false }
+    }
+    if ($r.Status -eq 429 -or ($r.Status -ge 500 -and $r.Status -lt 600)) { return $true }
+    return $false
+}
+
+# Adds only the main models that the configured CPA key can actually use.
+function Add-CpaMainModel {
+    $good = New-Object System.Collections.ArrayList
+    $skipped = New-Object System.Collections.ArrayList
+    Write-CpaLog 'Проверяю основные модели CPA...'
+    foreach ($spec in $script:CpaConst.MainModels) {
+        if (Test-CpaModelAccess $spec.name) {
+            $null = $good.Add(('{0}={1}={2}' -f $spec.name, $spec.label, $spec.behavesAs))
+            Write-CpaLog ('  ' + $spec.name + ': OK')
+        } else {
+            $null = $skipped.Add($spec.name)
+        }
+    }
+    if ($good.Count -eq 0) {
+        Write-CpaWarn 'Основные модели CPA недоступны этому ключу; добавляю только Claude.'
+        Write-CpaWarn 'Если нужны только Claude-модели, используйте -ClaudeOnly.'
+        return
+    }
+    if ($skipped.Count -gt 0) { Write-CpaWarn ('Пропущены модели без доступа: ' + ($skipped -join ' ')) }
+    Update-CpaModelFile -Mode add -Spec ([string[]]$good)
+}
+
+function Show-CpaModelList {
+    if (-not (Resolve-CpaKey)) { Stop-Cpa 'Не удалось получить рабочий CPA-ключ.' }
+    $r = Invoke-CpaHttp -Url ($script:Opt.BaseUrl + '/v1/models') -Headers @{ 'x-api-key' = $script:CpaKey } -TimeoutSec 30
+    if ($r.Status -ne 200) { Stop-Cpa ('CPA /v1/models вернул HTTP ' + $r.Status) }
+    try {
+        $ids = @((($r.Body | ConvertFrom-Json).data) | ForEach-Object { $_.id } | Where-Object { $_ } | Sort-Object -Unique)
+    } catch {
+        Stop-Cpa 'не удалось разобрать ответ /v1/models'
+    }
+    $claude = @($ids | Where-Object { $_.ToLowerInvariant().StartsWith('claude') })
+    $other = @($ids | Where-Object { $claude -notcontains $_ })
+    Write-CpaLog 'Модели Claude, доступные ключу CPA:'
+    foreach ($id in $claude) { Write-CpaLog ('  ' + $id) }
+    Write-CpaLog ''
+    Write-CpaLog ('Прочие модели: {0}. Через CPA они возможны, но в Claude Desktop' -f $other.Count)
+    Write-CpaLog 'не тестировались: приложение отправляет Anthropic-формат запросов.'
+    Write-CpaLog ''
+    Write-CpaLog 'Пример: -AddModel ''claude-opus-4-8=Opus 4.8'' -ConfigureOnly'
+}
+
 # --- configuration ---------------------------------------------------------------------
 
 function Write-CpaConfig {
@@ -853,6 +1062,24 @@ function Write-CpaConfig {
     $models = @($script:CpaConst.Models | ForEach-Object {
         [pscustomobject][ordered]@{ name = $_.name; supports1m = $false; labelOverride = $_.label; anthropicFamilyTier = $_.tier }
     })
+    # Extra models (-AddModel and the main CPA models). Built-ins stay first, so
+    # Sonnet 5.5 remains the default; extras follow in the order they were added.
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($m in $models) { $null = $seen.Add([string]$m.name) }
+    foreach ($entry in @(Read-CpaModelFile)) {
+        $name = [string]$entry['name']
+        if (-not $seen.Add($name)) { continue }
+        $item = [ordered]@{}
+        foreach ($key in $script:CpaConst.ModelKeys) {
+            if ($entry.Contains($key)) { $item[$key] = $entry[$key] }
+        }
+        $item['name'] = $name
+        if (-not $item.Contains('supports1m')) { $item['supports1m'] = $false }
+        if ($script:CpaConst.ModelTiers -cnotcontains [string]$item['anthropicFamilyTier']) {
+            $item['anthropicFamilyTier'] = Get-CpaModelTier $name
+        }
+        $models += [pscustomobject]$item
+    }
     Set-CpaProp $profileData 'coworkEgressAllowedHosts' @('*')
     Set-CpaProp $profileData 'inferenceProvider' 'gateway'
     Set-CpaProp $profileData 'inferenceGatewayBaseUrl' $base
@@ -889,7 +1116,7 @@ function Write-CpaConfig {
 
     Write-CpaLog ('profile: ' + $profilePath)
     Write-CpaLog ('applied_id: ' + $chosen.id)
-    Write-CpaLog ('models: ' + (($script:CpaConst.Models | ForEach-Object { $_.name }) -join ', '))
+    Write-CpaLog ('models: ' + (($models | ForEach-Object { $_.name }) -join ', '))
     Write-CpaLog ('chatTabEnabled: ' + ([string]([bool]$script:Opt.WithChat)).ToLowerInvariant())
     Write-CpaLog ('backup: ' + $backupDir)
 }
@@ -985,6 +1212,12 @@ function Invoke-CpaDryRun {
     Write-CpaLog ('latest: ' + $(if ($latest.Version) { $latest.Version } else { 'unknown' }) + ' ' + $latest.Url + ' (' + $latest.Source + ')')
     Write-CpaLog ('3P config: ' + (Get-CpaSupportDir))
     Write-CpaLog ('models: ' + (($script:CpaConst.Models | ForEach-Object { $_.name }) -join ', '))
+    if ($script:Opt.MainModels) {
+        Write-CpaLog 'main models:'
+        foreach ($m in $script:CpaConst.MainModels) { Write-CpaLog ('  ' + $m.name) }
+    }
+    $extra = Get-CpaModelSummary
+    if ($extra) { Write-CpaLog ('extra models: ' + $extra) }
     $null = Resolve-CpaKey
     Write-CpaLog 'Были бы записаны профиль CPA, _meta.json и deploymentMode=3p.'
     Write-CpaLog ('Claude был бы перезапущен: ' + $(if ($script:Opt.NoRestart) { 'no' } else { 'yes' }) + '.')
@@ -1021,6 +1254,11 @@ function Invoke-CpaMain {
         if ($script:Opt.BaseUrl -notmatch '^https?://') { Stop-Cpa ('Некорректный -BaseUrl: ' + $script:Opt.BaseUrl) }
 
         if ($script:Opt.VerifyDownload) { return (Invoke-CpaVerifyDownload) }
+        if ($script:Opt.ListModels) { Show-CpaModelList; return 0 }
+        if (-not $script:Opt.Check -and -not $script:Opt.DryRun) {
+            if ($script:Opt.AddModel.Count -gt 0) { Update-CpaModelFile -Mode add -Spec $script:Opt.AddModel }
+            if ($script:Opt.RemoveModel.Count -gt 0) { Update-CpaModelFile -Mode remove -Spec $script:Opt.RemoveModel }
+        }
         if ($script:Opt.Check) { return (Invoke-CpaCheck) }
         if ($script:Opt.DryRun) { Invoke-CpaDryRun; return 0 }
 
@@ -1030,6 +1268,7 @@ function Invoke-CpaMain {
         }
 
         $null = Resolve-CpaKey
+        if ($script:Opt.MainModels) { Add-CpaMainModel }
         Stop-CpaApp
         Write-CpaConfig
         if ($script:Opt.NoRestart) { Write-CpaLog 'Настройка записана. Claude не запускался (-NoRestart).' }

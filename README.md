@@ -201,11 +201,11 @@ irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/m
 | `--no-update` | `-NoUpdate` | Не обновлять приложение, если оно уже стоит |
 | `--no-restart` | `-NoRestart` | Записать настройку, но не запускать Claude |
 | `--with-chat` | `-WithChat` | Показывать вкладку Chat (ей нужен аккаунт claude.ai) |
-| `--with-main-models` | — | Добавить основные модели CPA (включено по умолчанию) |
-| `--claude-only` | — | Только три базовые модели Claude, без DeepSeek, GPT и Gemini |
-| `--list-models` | — | Показать модели Claude, доступные вашему ключу CPA |
-| `--add-model SPEC` | — | Добавить модель в список Claude: `ID`, `ID=Подпись` или `ID=Подпись=Claude-модель` |
-| `--remove-model ID` | — | Убрать модель, добавленную через `--add-model` |
+| `--with-main-models` | `-WithMainModels` | Добавить основные модели CPA (включено по умолчанию) |
+| `--claude-only` | `-ClaudeOnly` | Только три базовые модели Claude, без DeepSeek, GPT и Gemini |
+| `--list-models` | `-ListModels` | Показать модели Claude, доступные вашему ключу CPA |
+| `--add-model SPEC` | `-AddModel SPEC` | Добавить модель в список Claude: `ID`, `ID=Подпись` или `ID=Подпись=Claude-модель` |
+| `--remove-model ID` | `-RemoveModel ID` | Убрать модель, добавленную через `--add-model` |
 | `--yes` | `-Yes` | Не задавать вопросов, если ключ уже найден |
 | `--ask-key` | `-AskKey` | Не искать сохранённый ключ, а сразу спросить новый |
 | `--force` | `-Force` | Записать настройку, даже если проверка ключа не прошла |
@@ -215,16 +215,12 @@ irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/m
 | `--key KEY` | `-Key KEY` | Передать ключ в команде. Не рекомендуется: ключ останется в истории команд |
 | `--help` | `-Help` | Показать справку |
 
-> Управление списком моделей (строки с «—» в колонке Windows) пока работает
-> только на Mac. Установщик для Windows записывает три базовые модели Claude.
+> В PowerShell несколько моделей в `-AddModel` перечисляют через запятую:
+> `-AddModel 'a=A','b=B'`. Параметры вида `ID=Подпись` берите в кавычки.
 
 </details>
 
 ## Другие модели
-
-> [!NOTE]
-> Этот раздел и раздел «Основные модели CPA» описывают Mac. Установщик для
-> Windows пока записывает только три базовые модели Claude.
 
 Три базовые модели — **Claude Sonnet 5.5**, **Claude Opus 5.5** и
 **Claude Haiku 5.5** — остаются в списке всегда. Если ваш ключ CPA открывает
@@ -234,23 +230,49 @@ irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/m
 
 Посмотреть, что доступно вашему ключу:
 
+На Mac:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --list-models
 ```
 
+На Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -ListModels
+```
+
 Добавить модель (подпись после `=` необязательна):
+
+На Mac:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --add-model 'claude-opus-4-8=Opus 4.8' --configure-only
 ```
 
+На Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -AddModel 'claude-opus-4-8=Opus 4.8' -ConfigureOnly
+```
+
 Можно добавить несколько моделей сразу:
+
+На Mac:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
   --add-model 'claude-sonnet-5=Sonnet 5' \
   --add-model 'claude-fable-5-2=Fable 5.2' \
   --configure-only
+```
+
+На Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) `
+  -AddModel 'claude-sonnet-5=Sonnet 5','claude-fable-5-2=Fable 5.2' `
+  -ConfigureOnly
 ```
 
 Если модель не от Anthropic, под исходным именем её добавить нельзя: Claude
@@ -260,11 +282,21 @@ alias с `claude-` или названием семейства (`sonnet`, `haik
 например, `sonnet-4-5-cpa`. После этого добавьте alias. Третий элемент
 задаёт `behavesAs` — лимиты и уровни effort:
 
+На Mac:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- \
   --add-model 'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5' \
   --add-model 'haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5' \
   --configure-only
+```
+
+На Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) `
+  -AddModel 'sonnet-4-5-cpa=DeepSeek V4 Pro=claude-sonnet-5','haiku-4-5-cpa=DeepSeek V4.1 Flash=claude-haiku-5-5' `
+  -ConfigureOnly
 ```
 
 Пример маршрута в CPA (`cpa-key-policy`):
@@ -285,19 +317,28 @@ Alias нужно добавить и в список моделей вашего
 
 Убрать добавленную модель:
 
+На Mac:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash -s -- --remove-model claude-opus-4-8 --configure-only
+```
+
+На Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -RemoveModel claude-opus-4-8 -ConfigureOnly
 ```
 
 Что важно знать:
 
 - Три базовые модели остаются в списке всегда. Первая модель списка
   считается моделью по умолчанию — это Sonnet 5.5.
-- Добавленные модели сохраняются в
-  `~/.config/claude-desktop-cpa/models.json`. Обычный запуск установщика их
-  не удаляет.
+- Добавленные модели сохраняются в файле `models.json`: на Mac —
+  `~/.config/claude-desktop-cpa/models.json`, на Windows —
+  `%LOCALAPPDATA%\claude-desktop-cpa\models.json`. Обычный запуск
+  установщика их не удаляет. В этом файле нет ключей.
 - После изменения списка Claude нужно перезапустить. Установщик делает это
-  сам, если не указан `--no-restart`.
+  сам, если не указан `--no-restart` (на Windows — `-NoRestart`).
 - Модели не-Claude (`gpt-*`, `gemini-*`, `deepseek-*` и другие) добавляются
   только через alias, опубликованный в CPA. Установщик откажется записывать
   такой ID напрямую: Claude Desktop всё равно выбросит его из списка.
@@ -354,31 +395,41 @@ python3 scripts/sync-cpa-main-models.py --all-keys --apply
 Если позже вы создадите новый ключ CPA, повторите команду с `--all-keys` —
 она добавит ему те же модели.
 
-### На каждом Mac
+### На каждом компьютере
 
 Пользователю management key не нужен. Установщик по умолчанию проверяет,
 какие из основных alias доступны его ключу, и добавляет только их:
+
+На Mac:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.sh | bash
 ```
 
-Или из клонированного репозитория:
+На Windows:
 
-```bash
-./install.sh
+```powershell
+irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1 | iex
 ```
 
-Если нужны только три базовые модели Claude:
+Если нужны только три базовые модели Claude.
+
+На Mac (из клонированного репозитория):
 
 ```bash
 ./install.sh --claude-only
 ```
 
+На Windows:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/yshishenya/claude-desktop-cpa-onboarding/main/install.ps1))) -ClaudeOnly
+```
+
 Модели, к которым у ключа нет доступа, пропускаются с предупреждением.
 Повторный запуск уже добавленные модели не удаляет; `--claude-only` тоже не
 удаляет их, а только не добавляет новые. Для удаления используйте
-`--remove-model`.
+`--remove-model` (на Windows — `-RemoveModel`).
 
 ## Как вернуть всё обратно
 
@@ -570,6 +621,15 @@ Claude Desktop принимает в `inferenceModels` только ID, похо
 `configLibrary\<uuid>.json`, `configLibrary\_meta.json`,
 `claude_desktop_config.json`. При следующем запуске приложение шифрует ключ
 через DPAPI; `-Check` тогда покажет `key_kind: encrypted`.
+
+**Список моделей**
+
+Логика та же, что на Mac: основные модели CPA проверяются запросом
+`POST /v1/messages` с вашим ключом, и добавляются только доступные (ответы
+`429` и `5xx` считаются временными, модель остаётся). Модели хранятся в
+`%LOCALAPPDATA%\claude-desktop-cpa\models.json` и дописываются в
+`inferenceModels` после трёх базовых. Список основных моделей и фильтр имён
+других производителей совпадают с `install.sh`: это проверяет тест.
 
 **Кодировка и запуск**
 
